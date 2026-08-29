@@ -1,0 +1,10 @@
+{
+  "name": "agents",
+  "version": "0.1.0",
+  "description": "A working Claude Code system: per-project memory protocol, shared-branch git sync, switchable output styles, and an end-of-session wrap-up ritual — shipped as one plugin.",
+  "author": { "name": "nwinbourn" },
+  "homepage": "https://github.com/nwinbourn/agents",
+  "repository": "https://github.com/nwinbourn/agents",
+  "license": "MIT",
+  "keywords": ["memory", "git", "workflow", "collaboration", "output-styles"]
+}

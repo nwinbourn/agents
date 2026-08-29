@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+node_modules/
+
+# This repo's own working memory is private — local only, never published.
+/CONTEXT.md
+/STATE.md
+/PITFALLS.md
+/DESIGN.md
