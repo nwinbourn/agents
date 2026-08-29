@@ -42,16 +42,21 @@ For each project that should carry memory:
    `STATE.md` with the current phases.
 3. Commit them. Memory files are code — they travel with the repo.
 
-For a **shared** project (more than one person), also:
+That's it for most projects — **work on `main`**. Don't add a `dev` branch just to have
+a working branch; it's overhead with nothing to show for it on a solo or pre-launch repo.
 
-4. Create the working branch and push it:
+**Add `dev` only when the project is live** — real users, `main` auto-deploys, and more
+than one person commits. Then the branch is doing a real job: keeping half-finished work
+off production. Set it up yourself, deliberately:
 
-   ```bash
-   git switch -c dev && git push -u origin dev
-   ```
+```bash
+git switch -c dev && git push -u origin dev
+```
 
-5. Point deploys at `main` (Vercel or similar auto-deploys `main`; pushes to `dev`
-   get preview builds). Record where it deploys in `CONTEXT.md`.
+Then point deploys at `main` (Vercel and similar auto-deploy `main`; pushes to `dev` get
+preview builds) and record where it deploys in `CONTEXT.md`. From that moment the
+session-start sync and the wrap-up push activate on their own — they key off
+`origin/dev` existing, and stay silent everywhere else.
 
 That's the whole adoption. The hooks detect it from here: `origin/dev` existing turns
 on the session-start sync, a `STATE.md` existing turns on the memory enforcement.

@@ -72,7 +72,12 @@ silent everywhere else.
 | `skills/voice` | Show or switch the active output style. |
 | `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles, harness config. |
 
-## The git flow
+## The git flow (live projects only)
+
+Most repos should just work on `main`. The flow below is for a **live** project — real
+users, `main` auto-deploys, more than one person committing. Nothing here activates
+unless the repo already has an `origin/dev` branch, and no agent will ever create one for
+you.
 
 ```
 main   ────────────────●──────────────────────●────   production (auto-deploys)

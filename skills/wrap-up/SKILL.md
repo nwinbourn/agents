@@ -152,9 +152,10 @@ Check whether this project uses the shared-branch flow:
 git rev-parse --verify --quiet refs/remotes/origin/dev
 ```
 
-**No `origin/dev`** → solo flow: show what would be committed and ask. Pushing is the
-user's call. Never sweep in files the user was working on themselves — check `git status`
-for anything you didn't touch and exclude it explicitly. Done.
+**No `origin/dev`** → the normal case: work is on `main`. Show what would be committed
+and ask. Pushing is the user's call. Never sweep in files the user was working on
+themselves — check `git status` for anything you didn't touch and exclude it explicitly.
+**Do not create a `dev` branch** — its absence is not a gap to fill. Done.
 
 **`origin/dev` exists** → `dev` must end the session committed and pushed, because
 unpushed work (including the memory updates from steps 3–6) is invisible to every other

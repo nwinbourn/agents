@@ -7,8 +7,8 @@ gitignored, never published. Read them if they exist on this machine.
 
 This repo eats its own dogfood: `templates/AGENTS.md` is both the template we ship AND
 the live protocol for working on this repo itself (one home per fact — no separate
-copy). The git-flow section applies here: `dev` is the working branch, `main` is what
-users install from.
+copy). **Work on `main`** — this is a plugin repo, not a live auto-deploying site, so
+the `dev` flow in that template does not apply here.
 
 Repo-only rules:
 

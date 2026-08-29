@@ -46,10 +46,20 @@ but must follow the rules below.
 - **Separate decided work from ideas.** Mixing them makes the list look longer and less
   trustworthy. Moving an idea into the next-up list is itself the decision.
 
-## Git flow (shared projects)
+## Git flow
 
-Applies when the repo has a GitHub remote **and** an `origin/dev` branch. Solo repos
-without `dev` skip this section.
+**Most projects: work directly on `main`.** That is the default and it is fine.
+
+The `dev` flow below applies **only** when the repo already has an `origin/dev` branch —
+a deliberate choice a team makes for a **live** project where `main` auto-deploys to real
+users. If there is no `dev` branch, there is nothing to adopt here.
+
+**No agent ever creates `dev`.** Not to "have a working branch", not to be safe, not
+because this section exists. If a live, auto-deploying project with more than one person
+clearly should have `dev` and doesn't, say so and get an explicit go-ahead — never
+create it unilaterally.
+
+### When `origin/dev` exists
 
 - **`dev` is the working branch.** Every person and every agent commits there, constantly.
 - **`main` is production.** It auto-deploys (CONTEXT.md says where — Vercel or similar).

@@ -9,8 +9,8 @@
 
 ## Stack
 
-<!-- Framework, language, hosting, deployment. e.g. "Next.js on Vercel — main is
-     the live site, dev is the shared working branch." -->
+<!-- Framework, language, hosting, deployment. e.g. "Next.js on Vercel, deploys from
+     main." Note a dev branch here only if the project actually has one. -->
 
 ## Settled decisions
 
