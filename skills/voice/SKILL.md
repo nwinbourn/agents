@@ -1,6 +1,7 @@
 ---
 name: voice
 description: Show or switch the active output style (default / technical / learning / terse). Invoke on "/voice", "/voice <style>", or when the user asks to change how Claude talks — "switch to terse", "go into learning mode", "what style is on?".
+argument-hint: "[default | technical | learning | terse]"
 ---
 
 # /voice — output style switcher
