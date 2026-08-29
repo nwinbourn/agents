@@ -57,6 +57,30 @@ That's the whole adoption. The hooks detect it from here: `origin/dev` existing 
 on the session-start sync, a `STATE.md` existing turns on the memory enforcement.
 Repos without either stay untouched.
 
+## Optional: the delegation harness
+
+Off until you turn it on. Skip this if you don't use subagents much.
+
+```
+/harness on
+```
+
+That writes `~/.claude/harness.json` with defaults and starts the hooks: a compact
+delegation core injected each turn, a cost estimate before each dispatch, and a tally of
+what workers actually cost. Tune the two numbers that matter in that file:
+
+- `askThresholdTokens` (400k) — a fan-out estimated above this turns into one permission
+  prompt. Raise it if you're prompted too often; lower it if a big fleet has ever
+  surprised you.
+- `expensiveModels` / `cheapModels` — your top and standard tiers.
+
+`/harness status` reports live workers, today's spend, reuse rate, and whether the mode is
+paying for itself. `/harness off` stops all of it; the doctrine in the skill still works by
+hand.
+
+There's a shadow mode too: set `tallyWhenDisabled: true` with `enabled: false` to measure
+what delegation costs you *before* turning the harness on, so the comparison is real.
+
 ## Daily rhythm
 
 - **Open a session** → the sync hook has already pulled `dev` if it was safe; if

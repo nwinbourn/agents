@@ -20,6 +20,12 @@ automatically, switchable output styles, and a session ritual that closes the lo
 - **Enforcement hooks, not good intentions.** A stop hook nags when `STATE.md` goes
   stale. A wrap-up check catches changelog drift. The memory protocol holds because
   the harness holds it, not because anyone remembers to.
+- **A delegation harness.** `/harness` turns subagent work into a decision: cost a
+  fan-out *before* it runs, route by task complexity, reuse workers instead of re-paying
+  their boot cost, and verify high-stakes findings adversarially. No agent-count caps —
+  it estimates tokens and only interrupts when a fleet is genuinely expensive. Ships with
+  a plays library for implementing designs, debugging, back/front ends, security reviews,
+  refactors, and research.
 - **Output styles.** `core` communication rules always apply; one active style
   (`default` / `technical` / `learning` / `terse`) layers on top, switched with
   `/voice`. Each person keeps their own tuned copy.
@@ -58,9 +64,13 @@ silent everywhere else.
 | `hooks/comms-style.mjs` | Injects `core` + your active output style into every turn. |
 | `hooks/state-reminder.mjs` | Stop hook: flags when project files changed but `STATE.md` didn't. |
 | `hooks/wrap-up-arm.mjs` + `wrap-up-bloat-check.mjs` | Catches `STATE.md` bloat right after a wrap-up. |
+| `hooks/harness-core.mjs` | Injects the compact delegation core each turn (only while `/harness` is on). |
+| `hooks/harness-dispatch.mjs` + `harness-workflow.mjs` | Cost a dispatch or a workflow before it runs; one permission prompt per expensive burst, never a hard block. |
+| `hooks/harness-settle.mjs` + `harness-stop.mjs` | Tally every dispatch and track which workers are still resumable. |
 | `skills/wrap-up` | The end-of-session ritual: update memory, compact it, commit and push `dev`. |
+| `skills/harness` | Delegation doctrine + plays library. Usable by hand with zero hooks. |
 | `skills/voice` | Show or switch the active output style. |
-| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles. |
+| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles, harness config. |
 
 ## The git flow
 
@@ -75,6 +85,32 @@ dev    ──●──●──●──●───●──●──●──�
 
 Full rules live in [templates/AGENTS.md](templates/AGENTS.md) — copied into each
 project so every agent (not just Claude) reads the same law.
+
+## The delegation harness
+
+Off by default. `/harness on` writes `~/.claude/harness.json` and starts the hooks.
+
+The problem it solves: subagents are cheap to spawn and expensive to spawn *badly*. A
+worker can't see your conversation and re-pays a "boot tax" to learn the project, so a
+six-worker fan-out for six small edits costs several times what doing it inline would.
+The harness makes that arithmetic visible at the moment you can still restructure it.
+
+```
+one worker  = boot tax + typical run
+a fan-out   = N × (boot tax + typical run)     ← said out loud, before dispatching
+```
+
+- **Costs bursts, not calls.** Five 250k workers are each under any sane per-call limit;
+  together they're 1.2M. The harness sums a session's recent dispatches and asks **once**.
+- **Learns your numbers.** Estimates start from shipped defaults and switch to the median
+  of your own measured runs once there's enough data.
+- **Never blocks.** It advises by default and asks above a threshold you set. It never
+  denies a dispatch and never silently grants permissions.
+- **Routes by task.** Top tier for refactors, architecture, and security analysis; cheap
+  tier for execution from a spec; `Explore` for read-only search.
+
+Run `/harness status` for live workers, today's spend, reuse rate, estimate-vs-actual, and
+an honest recommendation to turn it off if the tally says it isn't paying for itself.
 
 ## License
 
