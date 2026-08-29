@@ -1,0 +1,41 @@
+{
+  "_readme": [
+    "Default config for the /harness delegation skill. Copy to ~/.claude/harness.json",
+    "(or run `/harness on`, which creates it). Every field is optional — missing keys",
+    "fall back to these shipped defaults. Delete the _readme and _comments keys freely.",
+    "The harness is fully silent until this file exists AND enabled is true",
+    "(tallyWhenDisabled being the one exception — shadow measurement only)."
+  ],
+  "_comments": {
+    "enabled": "the toggle; /harness on|off flips only this",
+    "askThresholdTokens": "a BURST estimate above this turns the dispatch into a permission prompt. Deliberately high: it should fire on a fleet, not a single worker",
+    "dailyAdvisoryTokens": "crossing this adds one advisory line to the injected context. It never asks",
+    "burstWindowSeconds": "dispatches from the same session inside this window are costed together as one burst",
+    "reuseWindowMinutes": "how long a finished worker stays listed as a reuse candidate",
+    "baseBootTokens": "the unmeasurable part of every worker's boot: system prompt + tool schemas",
+    "bytesPerToken": "crude bytes-to-tokens ratio; tune toward 3.4 for code-dense repos",
+    "defaultEstimates": "per-worker output estimates used until the tally has enough of your own data",
+    "learnFromTally": "replace defaults with your own medians once minSamplesToLearn known-token rows exist",
+    "expensiveModels": "your top tier — routed to for judgment-heavy work, costed as expensive",
+    "cheapModels": "standard execution tier",
+    "tallyWhenDisabled": "shadow mode: keep measuring dispatches while the harness is off, so /harness status has a baseline to compare against"
+  },
+  "enabled": false,
+  "askThresholdTokens": 400000,
+  "dailyAdvisoryTokens": 3000000,
+  "burstWindowSeconds": 120,
+  "reuseWindowMinutes": 45,
+  "baseBootTokens": 12000,
+  "bytesPerToken": 4,
+  "defaultEstimates": {
+    "Explore": 60000,
+    "cheap": 200000,
+    "expensive": 120000,
+    "unknown": 150000
+  },
+  "learnFromTally": true,
+  "minSamplesToLearn": 5,
+  "expensiveModels": ["opus", "fable"],
+  "cheapModels": ["sonnet", "haiku"],
+  "tallyWhenDisabled": false
+}
