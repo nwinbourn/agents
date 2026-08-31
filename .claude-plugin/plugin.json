@@ -1,6 +1,6 @@
 {
   "name": "agents",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "A working Claude Code system: per-project memory protocol, shared-branch git sync, an autonomous agent harness (worker reuse, silent model routing, chat-while-they-work), switchable output styles, and an end-of-session wrap-up ritual — shipped as one plugin.",
   "author": {
     "name": "nwinbourn"

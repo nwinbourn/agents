@@ -65,8 +65,10 @@ silent everywhere else.
 | `hooks/harness-core.mjs` | Injects the harness's standing orders each turn — only while `/harness` is on. |
 | `hooks/harness-dispatch.mjs` + `harness-workflow.mjs` | Enforce the fan-out caps: one permission prompt past 3 fable / 15 opus / 30 sonnet in parallel, total silence under them. |
 | `skills/harness` | The `/harness on \| off \| agents` switch and the conduct that goes with it. |
+| `skills/occam` | An over-engineering brake: guidance while building, and `/occam check` to strip over-built code out of the current changes. Its optional correction hook ships un-wired — the JSON to enable it is in `skills/occam/NOTES.md`. |
 | `skills/wrap-up` | The end-of-session ritual: update memory, compact it, commit and push `dev`. |
 | `skills/voice` | Show or switch the active output style. |
+| `commands/pause` + `commands/continue` | Interrupt handling: `/pause` folds a mid-task addition in without restarting; `/continue` resumes cleanly after an accidental ESC. |
 | `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles, harness core blocks. |
 
 ## The git flow (live projects only)
