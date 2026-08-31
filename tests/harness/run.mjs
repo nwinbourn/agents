@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const HOOKS = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "hooks");
 const hook = (n) => join(HOOKS, n);
-const ALL_HOOKS = ["harness-core.mjs", "harness-workflow.mjs"];
+const ALL_HOOKS = ["harness-core.mjs", "harness-workflow.mjs", "harness-dispatch.mjs"];
 
 let pass = 0;
 const failures = [];
@@ -170,12 +170,54 @@ check("core: a user override without sections still works", () => {
 
 // -------------------------------------------------------- workflow routing --
 
-check("workflow: unannotated sites on an expensive session are flagged", () => {
+const decision = (r) => r.out?.hookSpecificOutput?.permissionDecision;
+const reason = (r) => r.out?.hookSpecificOutput?.permissionDecisionReason ?? "";
+
+check("workflow: unannotated sites on an expensive session → ASK the user", () => {
   const home = track(sandbox());
   const t = transcript(home, "claude-opus-5");
-  const c = ctx(run("harness-workflow.mjs", wf("await agent('a')\nawait agent('b')", { transcript_path: t }), home));
-  assert(/set no `model`/.test(c), `expected a missing-model note: ${c}`);
-  assert(/inherit/.test(c), "should explain that they inherit the session model");
+  const r = run("harness-workflow.mjs", wf("await agent('a')\nawait agent('b')", { transcript_path: t }), home);
+  assert(decision(r) === "ask", `expected an ask, got ${decision(r)}`);
+  assert(/no model/.test(reason(r)) && /inherits/.test(reason(r)), `reason should carry the finding: ${reason(r)}`);
+  assert(/Deny/.test(reason(r)), "reason should tell the user what deny does");
+});
+
+check("workflow: unannotated on a CHEAP session is a note, not an ask", () => {
+  const home = track(sandbox());
+  const t = transcript(home, "claude-sonnet-5");
+  const r = run("harness-workflow.mjs", wf("await agent('a')\nawait agent('b')", { transcript_path: t }), home);
+  assert(decision(r) === undefined, `inheriting sonnet is fine — got ${decision(r)}`);
+  assert(/Set it deliberately/.test(ctx(r)), `expected the gentle note: ${ctx(r)}`);
+});
+
+check("dispatch: a fable worker → ASK", () => {
+  const home = track(sandbox());
+  const r = run("harness-dispatch.mjs", { tool_name: "Task", tool_input: { model: "fable", description: "x" } }, home);
+  assert(decision(r) === "ask", `expected an ask, got ${decision(r)}`);
+  assert(/fable/.test(reason(r)) && /Deny/.test(reason(r)), `reason should name fable and the deny path: ${reason(r)}`);
+});
+
+check("dispatch: opus, sonnet, haiku workers are silent", () => {
+  const home = track(sandbox());
+  for (const model of ["opus", "sonnet", "haiku"]) {
+    const r = run("harness-dispatch.mjs", { tool_name: "Task", tool_input: { model, description: "x" } }, home);
+    assert(r.raw.trim() === "", `${model} should be silent, got: ${r.raw.slice(0, 120)}`);
+  }
+});
+
+check("dispatch: no model + expensive session → note only, no ask", () => {
+  const home = track(sandbox());
+  const t = transcript(home, "claude-fable-5");
+  const r = run("harness-dispatch.mjs", { tool_name: "Task", tool_input: { description: "x" }, transcript_path: t }, home);
+  assert(decision(r) === undefined, `should not ask, got ${decision(r)}`);
+  assert(/inherits/.test(ctx(r)), `expected the inherit note: ${ctx(r)}`);
+});
+
+check("dispatch: no model + cheap session → silent", () => {
+  const home = track(sandbox());
+  const t = transcript(home, "claude-sonnet-5");
+  const r = run("harness-dispatch.mjs", { tool_name: "Task", tool_input: { description: "x" }, transcript_path: t }, home);
+  assert(r.raw.trim() === "", `should be silent, got: ${r.raw.slice(0, 120)}`);
 });
 
 check("workflow: fully annotated cheap script says nothing", () => {
@@ -186,11 +228,12 @@ check("workflow: fully annotated cheap script says nothing", () => {
   assert(r.raw.trim() === "", `deliberate routing should be silent, got: ${ctx(r)}`);
 });
 
-check("workflow: a top-heavy fan-out is flagged", () => {
+check("workflow: a top-heavy fan-out → ASK", () => {
   const home = track(sandbox());
   const script = Array.from({ length: 6 }, (_, i) => `await agent('t${i}', {model:'opus'})`).join("\n");
-  const c = ctx(run("harness-workflow.mjs", wf(script), home));
-  assert(/top tier/.test(c), `expected a top-heavy note: ${c}`);
+  const r = run("harness-workflow.mjs", wf(script), home);
+  assert(decision(r) === "ask", `expected an ask, got ${decision(r)}`);
+  assert(/top-tier/.test(reason(r)), `reason should name the pattern: ${reason(r)}`);
 });
 
 check("workflow: a couple of expensive sites is normal, not flagged", () => {
@@ -200,28 +243,30 @@ check("workflow: a couple of expensive sites is normal, not flagged", () => {
   assert(r.raw.trim() === "", `mixed routing should be silent, got: ${ctx(r)}`);
 });
 
-check("workflow: fable in a fleet is called out", () => {
+check("workflow: fable in a fleet → ASK", () => {
   const home = track(sandbox());
   const script = ["await agent('a', {model:'fable'})", "await agent('b', {model:'sonnet'})"].join("\n");
-  const c = ctx(run("harness-workflow.mjs", wf(script), home));
-  assert(/fable/.test(c), `expected a fable note: ${c}`);
+  const r = run("harness-workflow.mjs", wf(script), home);
+  assert(decision(r) === "ask", `expected an ask, got ${decision(r)}`);
+  assert(/fable/.test(reason(r)), `reason should name fable: ${reason(r)}`);
 });
 
-check("workflow: never blocks — no permissionDecision, ever", () => {
+check("workflow: asks but never denies", () => {
   const home = track(sandbox());
   const t = transcript(home, "claude-opus-5");
   const scripts = ["await agent('a')", Array.from({ length: 20 }, (_, i) => `await agent('t${i}', {model:'fable'})`).join("\n")];
   for (const script of scripts) {
     const r = run("harness-workflow.mjs", wf(script, { transcript_path: t }), home);
-    assert(r.out?.hookSpecificOutput?.permissionDecision === undefined, `emitted a decision: ${r.out?.hookSpecificOutput?.permissionDecision}`);
+    assert(decision(r) === "ask", `flagged waste must ask, got ${decision(r)}`);
   }
 });
 
 check("workflow: `model` inside a prompt string doesn't count as set", () => {
   const home = track(sandbox());
   const t = transcript(home, "claude-opus-5");
-  const c = ctx(run("harness-workflow.mjs", wf("await agent('please use model: sonnet here')", { transcript_path: t }), home));
-  assert(/set no `model`/.test(c), `a string should not satisfy the check: ${c}`);
+  const r = run("harness-workflow.mjs", wf("await agent('please use model: sonnet here')", { transcript_path: t }), home);
+  assert(decision(r) === "ask", `unannotated on expensive session should ask, got ${decision(r)}`);
+  assert(/no model/.test(reason(r)), `a string should not satisfy the check: ${reason(r)}`);
 });
 
 check("workflow: quoted object key counts as set", () => {

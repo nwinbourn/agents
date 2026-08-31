@@ -108,11 +108,12 @@ does anything useful. Three rules follow from that:
   on; results integrate as they land. Anything that writes files goes foreground instead,
   because a backgrounded worker stuck on a permission prompt stalls invisibly.
 
-One piece of that is mechanically enforced rather than advised: a hook reads every
-`agent()` call in a Workflow script *before it runs* and flags the routing waste it can
-actually see — sites with no `model` set (they silently inherit an expensive session
-model), a fan-out where most workers are top tier, or `fable` used as a fleet model. It
-never blocks; it says what it found and lets you decide.
+The expensive-model waste is mechanically enforced rather than advised: a hook reads
+every `agent()` call in a Workflow script *before it runs*, and the waste it can prove —
+sites with no `model` set on an expensive session (they silently inherit it), a fan-out
+where most workers are top tier, `fable` used as a fleet model, or any single worker
+dispatched on `fable` — becomes a **permission prompt**. You approve if it's deliberate;
+you deny and the work re-routes to the right tier. Correct routing never prompts.
 
 ## License
 

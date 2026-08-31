@@ -116,6 +116,21 @@ the worker sounded. Workers overclaim exactly when they're wrong. High-stakes fi
 (security especially) get an independent worker prompted to **refute** them; a reviewer asked
 to "check" confirms, one asked to break finds.
 
+## What is enforced, mechanically
+
+Two hooks turn expensive-model waste into a **permission prompt for the user** — not a
+note for the model, because the model that wrote the wasteful dispatch is the wrong party
+to adjudicate it:
+
+- **A Workflow script** with unannotated `agent()` sites on an expensive session, a
+  top-heavy fan-out (most sites on top-tier models), or `fable` used as a fleet model →
+  **ask**. Deny re-routes the script; approve means the routing was deliberate.
+- **A single dispatch on `fable`** → **ask**. Fable is the main loop's model and the
+  verifier of last resort, never a default worker.
+
+Neither hook can deny on its own, and correct routing is silent — the prompt fires only
+on the patterns that burn money.
+
 ## Never delegate
 
 Visual iteration (a worker can't see the preview, and panes freeze scroll-driven motion),
