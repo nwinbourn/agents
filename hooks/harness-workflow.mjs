@@ -2,44 +2,33 @@
 /**
  * harness-workflow — PreToolUse hook on the Workflow tool.
  *
- * The one place where tier routing can be checked mechanically instead of hoped
- * for. A workflow script's `agent()` calls are dispatched inside the tool, so no
- * per-dispatch hook ever sees them — but the script is right there as text, and
- * each call's `model:` can be read statically before anything runs.
+ * A workflow is one atomic fan-out: its `agent()` calls all dispatch inside the
+ * tool, where no per-dispatch hook can see them. So this reads the script as
+ * text first, resolves each call's tier (its explicit `model`, or the session
+ * model it would inherit when none is set), and counts them.
  *
- * What it flags, and why each is waste:
- *   - sites with NO model on an expensive session → they inherit it, so an
- *     unannotated fan-out is silently an expensive fan-out. The single most
- *     costly mistake, and invisible without this check.
- *   - a fan-out where most workers are top tier → fan-outs are parallel
- *     execution; the judgment happened when the split was chosen. Occasionally
- *     deliberate, usually not.
- *   - `fable` sites in a fleet → it's the main loop's model and the verifier of
- *     last resort, not a worker model.
+ * If any tier's count exceeds its cap, the whole Workflow call becomes a
+ * permission prompt naming the counts — the user decides. This is the guard
+ * against the classic accident: on a fable session, a script whose agent() calls
+ * omit `model` is silently an all-fable fleet, and a big one nukes usage before
+ * you can read it. Under the caps, it's silent.
  *
- * The flags above become a PERMISSION PROMPT ("ask"), not a note. The model that
- * wrote the wasteful script is the wrong party to adjudicate it — history shows
- * a remembered rule does not stop a fleet. The USER approves or denies, with the
- * findings in front of them. It never denies outright, and never emits "allow"
- * (that would override the user's own permission settings).
+ * A workflow is checked as its own snapshot — it does not touch the rolling
+ * dispatch counter — so denying and re-submitting a re-routed script counts
+ * fresh rather than stacking on the rejected version.
  *
- * Verdict "unknown" — opts by reference, spread, or built by a helper — is never
- * flagged. The scanner can't read those, and a false positive that wedges a valid
- * workflow is worse than the tokens it would save.
+ * "unknown" sites (model built by a helper, spread, or a variable) can't be read
+ * and are never counted against a cap — a false positive that wedges a valid
+ * workflow is worse than the tokens it might save.
  *
- * Fail-open: any error exits 0 with no output.
+ * Never denies, never emits "allow". Fail-open: any error exits 0, no output.
  */
 import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import { activeConfig, tierOf } from "./lib/harness-config.mjs";
+import { activeConfig } from "./lib/harness-config.mjs";
 import { analyzeScript } from "./lib/workflow-scan.mjs";
 
-/** Most sites expensive is worth a word; a couple is normal. */
-const TOP_HEAVY_MIN_SITES = 4;
-const TOP_HEAVY_RATIO = 0.6;
-
-function emit(context, ask) {
+function emit(ask) {
   const out = { hookSpecificOutput: { hookEventName: "PreToolUse" } };
-  if (context) out.hookSpecificOutput.additionalContext = context;
   if (ask) {
     out.hookSpecificOutput.permissionDecision = "ask";
     out.hookSpecificOutput.permissionDecisionReason = ask;
@@ -48,7 +37,6 @@ function emit(context, ask) {
   process.exit(0);
 }
 
-/** The session's own model, read from the tail of its transcript. Null if unreadable. */
 function sessionModel(transcriptPath) {
   if (!transcriptPath) return null;
   try {
@@ -69,15 +57,22 @@ function sessionModel(transcriptPath) {
   }
 }
 
+/** Reduce a model name to a cap key ("fable"/"opus"/"sonnet"/…), or null if unknowable. */
+function capKey(model, cfg) {
+  const m = String(model ?? "").toLowerCase();
+  for (const name of [...cfg.expensiveModels, ...cfg.cheapModels]) {
+    if (m.includes(name)) return name;
+  }
+  return null;
+}
+
 try {
   const cfg = activeConfig();
   if (!cfg) process.exit(0);
 
   const evt = JSON.parse(readFileSync(0, "utf8"));
   const input = evt.tool_input ?? {};
-
-  // A saved workflow invoked by name carries no script — not this session's to police.
-  if (!input.script && !input.scriptPath) process.exit(0);
+  if (!input.script && !input.scriptPath) process.exit(0); // a named saved workflow carries no script
 
   let src = input.script;
   if (typeof src !== "string" && input.scriptPath) {
@@ -92,66 +87,36 @@ try {
   const sites = analyzeScript(src);
   if (!sites.length) process.exit(0);
 
-  const inherited = sessionModel(evt.transcript_path);
-  const inheritedTier = inherited ? tierOf(inherited, cfg) : "unknown";
+  const inheritedKey = capKey(sessionModel(evt.transcript_path), cfg);
 
-  const missing = [];
-  const fable = [];
-  let expensive = 0;
-  let readable = 0;
-
+  const counts = {}; // tier → number of sites
+  let missing = 0;
   for (const s of sites) {
-    if (s.verdict === "missing") {
-      missing.push(`line ${s.line}`);
-      readable++;
-      if (inheritedTier === "expensive") expensive++;
-    } else if (s.verdict === "present" && s.value) {
-      readable++;
-      if (tierOf(s.value, cfg) === "expensive") {
-        expensive++;
-        if (s.value === "fable") fable.push(`line ${s.line}`);
-      }
+    let key = null;
+    if (s.verdict === "present" && s.value) key = capKey(s.value, cfg);
+    else if (s.verdict === "missing") {
+      key = inheritedKey; // inherits the session model
+      missing++;
     }
-    // "unknown" verdicts are deliberately not counted — unreadable is not a finding.
+    // "unknown" verdicts are unreadable — never counted.
+    if (key) counts[key] = (counts[key] || 0) + 1;
   }
 
-  const askReasons = []; // expensive-model waste → the USER decides, not the model
-  const notes = [];      // informational only
+  const exceeded = Object.entries(counts)
+    .filter(([tier, n]) => Number.isFinite(cfg.caps?.[tier]) && n > cfg.caps[tier])
+    .map(([tier, n]) => `${n} ${tier} (cap ${cfg.caps[tier]})`);
 
-  if (missing.length && inheritedTier === "expensive") {
-    const shown = missing.slice(0, 8).join(", ") + (missing.length > 8 ? ", …" : "");
-    askReasons.push(
-      `${missing.length} of ${sites.length} agent() sites set no model (${shown}), so every one inherits this session's ${inherited} — an unannotated fan-out is silently an all-${inherited} fan-out`,
-    );
-  } else if (missing.length) {
-    // Cheap or unknown session: inheriting is probably fine — note, don't interrupt.
-    notes.push(`${missing.length} agent() site(s) set no \`model\` and will inherit the session model. Set it deliberately.`);
-  }
+  if (!exceeded.length) process.exit(0); // under every cap — run it silently
 
-  if (fable.length) {
-    askReasons.push(
-      `${fable.length} site(s) route workers to fable (${fable.join(", ")}) — the main loop's model and the verifier of last resort, not a fleet model`,
-    );
-  }
+  const inheritNote =
+    missing && inheritedKey && cfg.expensiveModels.includes(inheritedKey)
+      ? ` ${missing} of the sites set no \`model\`, so they inherit this session's ${inheritedKey} — an unannotated fan-out is silently an all-${inheritedKey} fleet.`
+      : "";
 
-  if (readable >= TOP_HEAVY_MIN_SITES && expensive / readable >= TOP_HEAVY_RATIO) {
-    askReasons.push(
-      `${expensive} of ${readable} readable sites run top-tier models — fan-outs are usually parallel execution from a split that already happened, which is cheap-tier work`,
-    );
-  }
-
-  if (askReasons.length) {
-    emit(
-      undefined,
-      `harness: this workflow looks like expensive-model waste — ${askReasons.join("; ")}. ` +
-        `Deny it and the script gets re-routed (sonnet for execution sites, top tier only where the judgment genuinely needs it). ` +
-        `Approve only if the expensive routing is deliberate.`,
-    );
-  }
-
-  if (!notes.length) process.exit(0); // routing looks deliberate; say nothing
-
-  emit(`[harness] ${notes.join(" ")}`);
+  emit(
+    `harness: this workflow would launch ${exceeded.join(", ")} at once — past your fan-out cap.${inheritNote} ` +
+      `Approve to run it, or deny and re-route: cheaper tier for the execution sites, or split it into smaller phases. This is the guardrail against an accidental fan-out nuking your usage.`,
+  );
 } catch {
   /* never wedge a workflow on our own bug */
 }

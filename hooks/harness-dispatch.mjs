@@ -2,26 +2,23 @@
 /**
  * harness-dispatch — PreToolUse hook on Task|Agent.
  *
- * The single-dispatch companion to harness-workflow's fleet check. Deliberately
- * tiny: one ask, one note, silence otherwise — a prompt that fires often stops
- * being read.
+ * Enforces the per-tier fan-out caps on individual dispatches. Each worker's
+ * tier is resolved (its explicit `model`, or the session model it would inherit
+ * when none is set) and added to a rolling burst counter. If that tier is now
+ * over its cap for the window, the dispatch becomes a permission prompt — the
+ * user decides, with the count in front of them. It never blocks on its own and
+ * never emits "allow".
  *
- *   ASK  — a worker dispatched on `fable`. That's the main loop's model and the
- *          verifier of last resort; as a worker model it's the purest form of
- *          "expensive agent used unnecessarily", so the USER decides, with the
- *          reason in front of them. (Deny → the work re-routes down a tier.)
- *
- *   NOTE — no `model` set while the session runs an expensive model: the worker
- *          silently inherits it. Legitimate often enough that interrupting every
- *          time would be nagging, so it's context, not a prompt.
- *
- * A deliberate opus worker is silent — routing judgment-heavy work to opus is
- * exactly what the doctrine says to do. Never denies; never emits "allow".
+ * The point: the user picks the models autonomously via the orchestrator; this
+ * is the backstop that makes an accidental burst — 16 opus workers, or an
+ * unannotated fan-out silently inheriting fable — impossible to launch unseen.
+ * A single worker, or a fan-out under the caps, is silent.
  *
  * Fail-open: any error exits 0 with no output.
  */
 import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { activeConfig, tierOf } from "./lib/harness-config.mjs";
+import { addAndCheck } from "./lib/harness-counter.mjs";
 
 function emit(context, ask) {
   const out = { hookSpecificOutput: { hookEventName: "PreToolUse" } };
@@ -55,6 +52,15 @@ function sessionModel(transcriptPath) {
   }
 }
 
+/** Reduce a model name to a cap key ("fable"/"opus"/"sonnet"/…), or null if unknowable. */
+function capKey(model, cfg) {
+  const m = String(model ?? "").toLowerCase();
+  for (const name of [...cfg.expensiveModels, ...cfg.cheapModels]) {
+    if (m.includes(name)) return name;
+  }
+  return null;
+}
+
 try {
   const cfg = activeConfig();
   if (!cfg) process.exit(0);
@@ -65,23 +71,32 @@ try {
   const input = evt.tool_input ?? {};
   const declared = input.model;
 
-  if (declared && String(declared).toLowerCase().includes("fable")) {
+  // Resolve which tier this worker actually runs on.
+  let key = capKey(declared, cfg);
+  let inheritedNote = "";
+  if (!declared || tierOf(declared, cfg) === "inherit") {
+    const inherited = sessionModel(evt.transcript_path);
+    key = capKey(inherited, cfg);
+    if (key && cfg.expensiveModels.includes(key)) {
+      inheritedNote = ` (no \`model\` set — inheriting the session's ${inherited}; set it explicitly)`;
+    }
+  }
+  if (!key) process.exit(0); // can't attribute a tier — don't guess
+
+  const now = Date.now();
+  const { totals, exceeded } = addAndCheck({ [key]: 1 }, cfg, now);
+  const hit = exceeded.find((e) => e.tier === key);
+
+  if (hit) {
     emit(
       undefined,
-      `harness: this dispatches a worker on fable — the main loop's model and the verifier of last resort, not a worker model. ` +
-        `Deny it and the task re-routes (opus if the judgment genuinely needs it, sonnet if it's execution). ` +
-        `Approve only if fable is deliberate — a last-resort verification of critical work.`,
+      `harness: this is the ${hit.count}th ${hit.tier} worker in the last ${cfg.capWindowSeconds}s (cap ${hit.cap})${inheritedNote}. ` +
+        `Approve to keep going, or deny and re-route the extra work to a cheaper tier / run it in sequence. This is the guardrail against an accidental fan-out.`,
     );
   }
 
-  if (!declared || tierOf(declared, cfg) === "inherit") {
-    const inherited = sessionModel(evt.transcript_path);
-    if (inherited && tierOf(inherited, cfg) === "expensive") {
-      emit(
-        `[harness] This dispatch names no \`model\`, so it inherits the session's ${inherited}. If this is execution from a clear spec, set \`model: "sonnet"\`.`,
-      );
-    }
-  }
+  // Under cap but inheriting expensive: a quiet nudge, never a prompt.
+  if (inheritedNote) emit(`[harness] This dispatch has no \`model\` and will inherit the session model. Set it deliberately — cheap tier for execution from a spec.`);
 } catch {
   /* never wedge a dispatch on our own bug */
 }

@@ -69,16 +69,24 @@ Skip this if you don't use subagents much.
 Create `~/.claude/harness.json`:
 
 ```json
-{ "enabled": true, "expensiveModels": ["opus", "fable"], "cheapModels": ["sonnet", "haiku"] }
+{ "enabled": true }
 ```
 
-That's the whole config — the two model lists are the only thing worth tuning, and they
-only matter if your top tier is named something else.
+That's enough — everything has sane defaults. Claude routes each worker to a model tier
+itself; you never type a model. The one thing worth tuning is the fan-out cap, which is what
+protects you from an accidental fleet:
 
-From then on a short routing reminder rides along each turn (reuse an existing worker
-before booting one; set `model` deliberately), and a hook checks Workflow scripts for
-routing waste before they run. `/harness agents` switches into orchestrator mode so
-workers run in the background while you keep talking; `/harness off` leaves it.
+```json
+{
+  "enabled": true,
+  "caps": { "fable": 3, "opus": 15, "sonnet": 30 },
+  "capWindowSeconds": 120
+}
+```
+
+A burst past any cap becomes a permission prompt before it launches; under the caps it's
+silent. `/harness agents` switches into orchestrator mode so workers run in the background
+while you keep talking; `/harness off` leaves it.
 
 ## Daily rhythm
 

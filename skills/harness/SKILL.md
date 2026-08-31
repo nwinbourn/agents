@@ -118,20 +118,31 @@ to "check" confirms, one asked to break finds.
 
 ## What is enforced, mechanically
 
-Two hooks turn expensive-model waste into a **permission prompt for the user** — not a
-note for the model, because the model that wrote the wasteful dispatch is the wrong party
-to adjudicate it:
+You route every worker yourself — pick the model per task, the way the tiers above describe.
+Two hooks are the backstop, and they enforce **fan-out caps by count**, because that's the
+mistake that nukes usage: a big fleet launched at once, usually by accident.
 
-- **A Workflow script** with unannotated `agent()` sites on an expensive session, a
-  top-heavy fan-out (most sites on top-tier models), or `fable` used as a fleet model →
-  **ask**. Deny re-routes the script; approve means the routing was deliberate.
-- **A single dispatch on `fable`** → **ask**. Fable is the main loop's model and the
-  verifier of last resort, never a default worker.
+**A fan-out past these counts becomes a permission prompt for the user:**
 
-Neither hook can deny on its own, and correct routing is silent — the prompt fires only
-on the patterns that burn money.
+| Tier | Cap (per burst) |
+|---|---|
+| fable | 3 |
+| opus | 15 |
+| sonnet | 30 |
 
-## Never delegate
+- A **Workflow script** is counted as one fan-out — its `agent()` sites per tier. Sites with
+  no `model` count as the session's own model, so an unannotated script on a fable session
+  is correctly counted as fable and trips the low cap fast.
+- **Individual dispatches** accumulate in a rolling window (`capWindowSeconds`, default 120)
+  — the 16th opus worker in two minutes asks; a paced sequence never piles up.
+- Under the caps, both hooks are **silent**. The prompt fires only on the fan-out that would
+  actually cost real money, and the user decides — deny re-routes or splits it, approve
+  means it was deliberate.
+
+Neither hook can deny or allow on its own. Caps and the window live in `~/.claude/harness.json`
+(`caps`, `capWindowSeconds`); the tier lists there decide which model name counts as what.
+
+## Never delegate## Never delegate
 
 Visual iteration (a worker can't see the preview, and panes freeze scroll-driven motion),
 decisions the user owns, and anything smaller than its own boot cost.

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "nwinbourn's Claude Code system \u2014 project memory, git-flow sync, delegation harness, output styles, wrap-up.",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
   "plugins": [
     {

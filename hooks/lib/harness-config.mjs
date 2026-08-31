@@ -20,6 +20,14 @@ export const DEFAULTS = {
   enabled: true,
   expensiveModels: ["opus", "fable"],
   cheapModels: ["sonnet", "haiku"],
+  // Per-tier fan-out caps. A fan-out that would put MORE than this many workers
+  // of a tier in flight within one burst window turns into a permission prompt —
+  // the user decides, the harness never blocks on its own. Keyed by model name,
+  // so a custom tier is capped by adding its name here.
+  caps: { fable: 3, opus: 15, sonnet: 30, haiku: 30 },
+  // Dispatches within this many seconds count as one fan-out for the caps. A
+  // paced sequence spread wider than this never accumulates — it isn't a burst.
+  capWindowSeconds: 120,
 };
 
 /** The ~/.claude directory (or HARNESS_HOME), where harness.json and harness/ live. */
@@ -36,6 +44,7 @@ export function paths() {
     dir,
     config: join(home, "harness.json"),
     mode: join(dir, "mode"), // `/harness agents` writes the active posture here
+    counts: join(dir, "counts.json"), // rolling per-tier fan-out counter
     coreOverride: join(home, "harness-core.md"),
   };
 }
@@ -45,6 +54,8 @@ function withDefaults(raw) {
   const list = (v, fallback) => (Array.isArray(v) ? v : fallback).map((m) => String(m).toLowerCase());
   cfg.expensiveModels = list(cfg.expensiveModels, DEFAULTS.expensiveModels);
   cfg.cheapModels = list(cfg.cheapModels, DEFAULTS.cheapModels);
+  cfg.caps = { ...DEFAULTS.caps, ...(raw.caps && typeof raw.caps === "object" ? raw.caps : {}) };
+  if (!Number.isFinite(cfg.capWindowSeconds) || cfg.capWindowSeconds <= 0) cfg.capWindowSeconds = DEFAULTS.capWindowSeconds;
   return cfg;
 }
 

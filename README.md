@@ -20,10 +20,10 @@ automatically, switchable output styles, and a session ritual that closes the lo
 - **Enforcement hooks, not good intentions.** A stop hook nags when `STATE.md` goes
   stale. A wrap-up check catches changelog drift. The memory protocol holds because
   the harness holds it, not because anyone remembers to.
-- **A delegation harness.** `/harness` does three things: reuse a worker you already
-  booted instead of paying a fresh one's startup cost, route work to the right model tier
-  so expensive models don't run cheap work, and an orchestrator mode that dispatches in
-  the background so you keep talking while workers run.
+- **A delegation harness.** `/harness` reuses workers instead of re-paying their startup
+  cost, routes each one to the right model tier automatically, and runs them in the
+  background so you keep talking. A fan-out past 3 fable / 15 opus / 30 sonnet workers asks
+  first — the guardrail against an accidental fleet nuking your usage.
 - **Output styles.** `core` communication rules always apply; one active style
   (`default` / `technical` / `learning` / `terse`) layers on top, switched with
   `/voice`. Each person keeps their own tuned copy.
@@ -93,27 +93,26 @@ project so every agent (not just Claude) reads the same law.
 
 Off until you turn it on. `/harness agents` starts orchestrator mode; `/harness off` stops it.
 
-Subagents are cheap to spawn and expensive to spawn badly. A worker can't see your
-conversation and re-reads the project to learn it — tens of thousands of tokens before it
-does anything useful. Three rules follow from that:
+Subagents are cheap to spawn and expensive to spawn badly. Three rules, and you never type a
+model name — Claude routes each worker itself:
 
-- **Reuse before booting.** `ListAgents` shows workers that already exist; `SendMessage`
-  continues one with its context intact — even after it has finished. That skips the
-  startup cost entirely. Reuse for adjacent follow-ups; boot fresh when the domain changes.
-- **Route by task, not by seniority.** Top tier for refactors, architecture, security
-  analysis and subtle logic. Cheap tier for execution from a clear spec. `Explore` for
-  read-only search. A fan-out's workers default cheap — the judgment happened when you
-  chose the split.
-- **Dispatch in the background and keep talking.** Workers run while you and Claude carry
-  on; results integrate as they land. Anything that writes files goes foreground instead,
-  because a backgrounded worker stuck on a permission prompt stalls invisibly.
+- **Reuse before booting.** A fresh worker re-reads the project to learn it — tens of
+  thousands of tokens before it does anything. `ListAgents` shows workers that already exist;
+  `SendMessage` continues one with its context intact, even after it has finished, skipping
+  that cost entirely.
+- **Route by task.** Top tier (opus/fable) for refactors, architecture, security analysis
+  and subtle logic; cheap tier (sonnet) for execution from a clear spec; `Explore` for
+  read-only search. A fan-out's workers default cheap — the judgment happened when the split
+  was chosen.
+- **Dispatch in the background and keep talking.** Workers run while you and Claude carry on;
+  results integrate as they land.
 
-The expensive-model waste is mechanically enforced rather than advised: a hook reads
-every `agent()` call in a Workflow script *before it runs*, and the waste it can prove —
-sites with no `model` set on an expensive session (they silently inherit it), a fan-out
-where most workers are top tier, `fable` used as a fleet model, or any single worker
-dispatched on `fable` — becomes a **permission prompt**. You approve if it's deliberate;
-you deny and the work re-routes to the right tier. Correct routing never prompts.
+The backstop is a **fan-out cap**, enforced mechanically: a burst past **3 fable, 15 opus,
+or 30 sonnet** workers turns into a permission prompt before anything launches. A Workflow
+script is counted as one fan-out (unannotated `agent()` sites count as the session's own
+model, so an all-inherited fleet is caught); individual dispatches accumulate in a rolling
+window. Under the caps it's silent; over them, you approve or deny. It never blocks on its
+own. The numbers live in `~/.claude/harness.json`.
 
 ## License
 
