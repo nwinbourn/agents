@@ -62,6 +62,30 @@ That's the whole adoption. The hooks detect it from here: `origin/dev` existing 
 on the session-start sync, a `STATE.md` existing turns on the memory enforcement.
 Repos without either stay untouched.
 
+## Optional: the agent harness
+
+Off until you turn it on — no config file needed:
+
+```
+/harness on
+```
+
+From then on Claude manages delegation itself: it reuses existing background agents
+instead of spawning fresh ones, routes each task to an appropriately priced model
+(fan-outs default to Sonnet), and runs delegated work asynchronously. You never pick
+models. The only time it asks anything: a parallel fan-out bigger than 3 fable /
+15 opus / 30 sonnet agents gets one permission prompt before launching.
+
+`/harness agents` is the chat-while-they-work mode — you keep talking, planning, and
+reviewing with the main agent while workers handle implementation in the background.
+`/harness off` stops new delegation (in-flight work finishes).
+
+To change the caps, create `~/.claude/harness.json`:
+
+```json
+{ "caps": { "fable": 3, "opus": 15, "sonnet": 30 }, "capWindowSeconds": 120 }
+```
+
 ## Daily rhythm
 
 - **Open a session** → the sync hook has already pulled `dev` if it was safe; if

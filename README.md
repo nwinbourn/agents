@@ -20,6 +20,10 @@ automatically, switchable output styles, and a session ritual that closes the lo
 - **Enforcement hooks, not good intentions.** A stop hook nags when `STATE.md` goes
   stale. A wrap-up check catches changelog drift. The memory protocol holds because
   the hooks hold it, not because anyone remembers to.
+- **An autonomous agent harness.** `/harness` maintains a reusable background worker
+  pool, routes each task to an appropriately priced model on its own, and only
+  interrupts for unusually large parallel fan-outs. You control whether it's active —
+  never the individual model assignments.
 - **Output styles.** `core` communication rules always apply; one active style
   (`default` / `technical` / `learning` / `terse`) layers on top, switched with
   `/voice`. Each person keeps their own tuned copy.
@@ -58,9 +62,12 @@ silent everywhere else.
 | `hooks/comms-style.mjs` | Injects `core` + your active output style into every turn. |
 | `hooks/state-reminder.mjs` | Stop hook: flags when project files changed but `STATE.md` didn't. |
 | `hooks/wrap-up-arm.mjs` + `wrap-up-bloat-check.mjs` | Catches `STATE.md` bloat right after a wrap-up. |
+| `hooks/harness-core.mjs` | Injects the harness's standing orders each turn — only while `/harness` is on. |
+| `hooks/harness-dispatch.mjs` + `harness-workflow.mjs` | Enforce the fan-out caps: one permission prompt past 3 fable / 15 opus / 30 sonnet in parallel, total silence under them. |
+| `skills/harness` | The `/harness on \| off \| agents` switch and the conduct that goes with it. |
 | `skills/wrap-up` | The end-of-session ritual: update memory, compact it, commit and push `dev`. |
 | `skills/voice` | Show or switch the active output style. |
-| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles. |
+| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles, harness core blocks. |
 
 ## The git flow (live projects only)
 
@@ -80,6 +87,35 @@ dev    ──●──●──●──●───●──●──●──�
 
 Full rules live in [templates/AGENTS.md](templates/AGENTS.md) — copied into each
 project so every agent (not just Claude) reads the same law.
+
+## The harness
+
+`/harness` is an autonomous agent manager with three jobs:
+
+1. **Reuse agents.** New work goes to an existing suitable agent whenever possible,
+   preserving its context and avoiding repeated codebase reads. A new agent is spawned
+   only when existing ones are unsuitable or occupied.
+2. **Route models autonomously.** The harness judges task difficulty and picks the
+   model itself — simple/mechanical work gets a smaller, cheaper model; normal
+   implementation and research get the mid tier; hard architecture, debugging, and
+   synthesis get a larger model. Fan-outs default to the mid tier. You never choose
+   models; missing or unsafe routing is corrected internally.
+3. **Work while you chat.** Delegated agents run asynchronously while the main agent
+   stays available for conversation, reporting progress and folding results in as they
+   arrive.
+
+The switch is yours, three positions:
+
+- `/harness on` — autonomous background delegation is enabled.
+- `/harness off` — no new delegation; work already in flight finishes.
+- `/harness agents` — interactive orchestration: you chat, plan, review, and audit with
+  the main agent while workers do the implementation and research in the background. It
+  never blocks a reply waiting on them.
+
+The **only** interruption is mechanical, enforced by hooks: a parallel workload of more
+than **3 fable, 15 opus, or 30 sonnet** agents becomes one permission prompt before
+anything launches. Under those caps the harness is completely silent. Tune the numbers
+in `~/.claude/harness.json` if you want different ones.
 
 ## License
 

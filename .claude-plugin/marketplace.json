@@ -5,14 +5,14 @@
     "url": "https://github.com/nwinbourn"
   },
   "metadata": {
-    "description": "nwinbourn's Claude Code system — project memory, git-flow sync, output styles, wrap-up.",
-    "version": "0.7.0"
+    "description": "nwinbourn's Claude Code system — project memory, git-flow sync, autonomous agent harness, output styles, wrap-up.",
+    "version": "0.8.0"
   },
   "plugins": [
     {
       "name": "agents",
       "source": "./",
-      "description": "Per-project memory protocol, shared-branch git sync, output styles, and /wrap-up.",
+      "description": "Per-project memory protocol, shared-branch git sync, /harness (reusable worker pool, autonomous model routing, background orchestration), output styles, and /wrap-up.",
       "category": "workflow"
     }
   ]
