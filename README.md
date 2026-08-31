@@ -2,7 +2,7 @@
 
 A working Claude Code system — shipped as one plugin.
 
-Not a prompt collection. This is the harness a small team actually runs on: project
+Not a prompt collection. This is the system a small team actually runs on: project
 memory that lives in git, a shared-branch flow that syncs it between people
 automatically, switchable output styles, and a session ritual that closes the loop.
 
@@ -19,11 +19,7 @@ automatically, switchable output styles, and a session ritual that closes the lo
   sync mechanism — git is the pipe.
 - **Enforcement hooks, not good intentions.** A stop hook nags when `STATE.md` goes
   stale. A wrap-up check catches changelog drift. The memory protocol holds because
-  the harness holds it, not because anyone remembers to.
-- **A delegation harness.** `/harness` reuses workers instead of re-paying their startup
-  cost, routes each one to the right model tier automatically, and runs them in the
-  background so you keep talking. A fan-out past 3 fable / 15 opus / 30 sonnet workers asks
-  first — the guardrail against an accidental fleet nuking your usage.
+  the hooks hold it, not because anyone remembers to.
 - **Output styles.** `core` communication rules always apply; one active style
   (`default` / `technical` / `learning` / `terse`) layers on top, switched with
   `/voice`. Each person keeps their own tuned copy.
@@ -62,13 +58,9 @@ silent everywhere else.
 | `hooks/comms-style.mjs` | Injects `core` + your active output style into every turn. |
 | `hooks/state-reminder.mjs` | Stop hook: flags when project files changed but `STATE.md` didn't. |
 | `hooks/wrap-up-arm.mjs` + `wrap-up-bloat-check.mjs` | Catches `STATE.md` bloat right after a wrap-up. |
-| `hooks/harness-core.mjs` | Injects the compact delegation core each turn (only while `/harness` is on). |
-| `hooks/harness-dispatch.mjs` + `harness-workflow.mjs` | Cost a dispatch or a workflow before it runs; one permission prompt per expensive burst, never a hard block. |
-| `hooks/harness-settle.mjs` + `harness-stop.mjs` | Tally every dispatch and track which workers are still resumable. |
 | `skills/wrap-up` | The end-of-session ritual: update memory, compact it, commit and push `dev`. |
-| `skills/harness` | Delegation doctrine + plays library. Usable by hand with zero hooks. |
 | `skills/voice` | Show or switch the active output style. |
-| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles, harness config. |
+| `templates/` | `AGENTS.md` (the shared protocol + git-flow law), project loader, memory file skeletons, starter output styles. |
 
 ## The git flow (live projects only)
 
@@ -88,31 +80,6 @@ dev    ──●──●──●──●───●──●──●──�
 
 Full rules live in [templates/AGENTS.md](templates/AGENTS.md) — copied into each
 project so every agent (not just Claude) reads the same law.
-
-## The delegation harness
-
-Off until you turn it on. `/harness agents` starts orchestrator mode; `/harness off` stops it.
-
-Subagents are cheap to spawn and expensive to spawn badly. Three rules, and you never type a
-model name — Claude routes each worker itself:
-
-- **Reuse before booting.** A fresh worker re-reads the project to learn it — tens of
-  thousands of tokens before it does anything. `ListAgents` shows workers that already exist;
-  `SendMessage` continues one with its context intact, even after it has finished, skipping
-  that cost entirely.
-- **Route by task.** Top tier (opus/fable) for refactors, architecture, security analysis
-  and subtle logic; cheap tier (sonnet) for execution from a clear spec; `Explore` for
-  read-only search. A fan-out's workers default cheap — the judgment happened when the split
-  was chosen.
-- **Dispatch in the background and keep talking.** Workers run while you and Claude carry on;
-  results integrate as they land.
-
-The backstop is a **fan-out cap**, enforced mechanically: a burst past **3 fable, 15 opus,
-or 30 sonnet** workers turns into a permission prompt before anything launches. A Workflow
-script is counted as one fan-out (unannotated `agent()` sites count as the session's own
-model, so an all-inherited fleet is caught); individual dispatches accumulate in a rolling
-window. Under the caps it's silent; over them, you approve or deny. It never blocks on its
-own. The numbers live in `~/.claude/harness.json`.
 
 ## License
 

@@ -95,8 +95,8 @@ to lose between sessions. Before moving on:
   not merged, a result returned but not yet applied. This is the single most valuable line
   in the file for a build that spans sessions.
 - **Nothing about the workers themselves.** No agent ids, no token counts, no "spawned 6
-  workers" — that's what happened, and the harness tally already has it. Only where the
-  work stands.
+  workers" — that's what happened, not where things stand. Record only the state of the
+  work.
 
 ### 5. Save durable preferences to memory
 

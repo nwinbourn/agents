@@ -1,7 +1,7 @@
 {
   "name": "agents",
-  "version": "0.6.0",
-  "description": "A working Claude Code system: per-project memory protocol, shared-branch git sync, a delegation harness that reuses workers and routes them to the right model tier, switchable output styles, and an end-of-session wrap-up ritual \u2014 shipped as one plugin.",
+  "version": "0.7.0",
+  "description": "A working Claude Code system: per-project memory protocol, shared-branch git sync, switchable output styles, and an end-of-session wrap-up ritual — shipped as one plugin.",
   "author": {
     "name": "nwinbourn"
   },
@@ -13,8 +13,6 @@
     "git",
     "workflow",
     "collaboration",
-    "output-styles",
-    "subagents",
-    "delegation"
+    "output-styles"
   ]
 }

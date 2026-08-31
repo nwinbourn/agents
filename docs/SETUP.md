@@ -62,32 +62,6 @@ That's the whole adoption. The hooks detect it from here: `origin/dev` existing 
 on the session-start sync, a `STATE.md` existing turns on the memory enforcement.
 Repos without either stay untouched.
 
-## Optional: the delegation harness
-
-Skip this if you don't use subagents much.
-
-Create `~/.claude/harness.json`:
-
-```json
-{ "enabled": true }
-```
-
-That's enough — everything has sane defaults. Claude routes each worker to a model tier
-itself; you never type a model. The one thing worth tuning is the fan-out cap, which is what
-protects you from an accidental fleet:
-
-```json
-{
-  "enabled": true,
-  "caps": { "fable": 3, "opus": 15, "sonnet": 30 },
-  "capWindowSeconds": 120
-}
-```
-
-A burst past any cap becomes a permission prompt before it launches; under the caps it's
-silent. `/harness agents` switches into orchestrator mode so workers run in the background
-while you keep talking; `/harness off` leaves it.
-
 ## Daily rhythm
 
 - **Open a session** → the sync hook has already pulled `dev` if it was safe; if
