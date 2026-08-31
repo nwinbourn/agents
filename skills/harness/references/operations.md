@@ -91,3 +91,9 @@ Hooks write these automatically when the harness is enabled:
   hints.
 
 Your one manual duty is the `rework` line. Everything else is measured, not remembered.
+
+**These files are the transient layer only.** They answer "what is running and what did it
+cost", and they die with the session. The durable answer — which slices exist, what landed,
+what's blocked — belongs in the project's `STATE.md`, written as statuses at wrap-up.
+Never copy worker ids or token counts into `STATE.md`: that is what happened, not where
+things stand.

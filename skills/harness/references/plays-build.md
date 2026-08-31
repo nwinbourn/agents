@@ -68,6 +68,29 @@ For work that isn't cleanly front or back.
 - **Route:** the skeleton and shared primitives go top tier; the fill-in goes `sonnet`.
 - **Exit:** the build passes and the feature works end to end, exercised by a real command.
 
+## Slices are `STATE.md` phases
+
+Before dispatching a fan-out, **write the slices into the project's `STATE.md` phases
+table** — one row per slice, with its owner and what's left. That table is the build
+ledger. It costs a minute and buys three things:
+
+- **Resumability.** A build spanning several sessions picks up correctly, because the
+  next session reads where each slice stands instead of guessing from the diff.
+- **A merge checklist.** "Which slices are integrated" is a column, not a memory.
+- **A visible blocker.** A slice waiting on another slice's interface is a status
+  anyone can see, including a collaborator on a different machine.
+
+Keep the two layers separate:
+
+| What | Where | Lifespan |
+|---|---|---|
+| Slice exists / in progress / done / blocked | `STATE.md` phases | the whole build, across sessions |
+| Which worker is live, what it costs, which files it holds | the harness ledger | this session only |
+
+Live worker state must **never** be written into `STATE.md` — worker ids and token counts
+are what happened, not where things stand, and putting them there turns the progress
+tracker back into a changelog.
+
 ## Common failure across all four
 
 **Fanning out before the interface is pinned.** Every one of these plays has the same

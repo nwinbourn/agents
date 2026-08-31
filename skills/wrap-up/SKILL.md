@@ -83,6 +83,21 @@ what happened, it has become the changelog again.
 `Do this first` must name the file, route or command. "Continue the redesign" is a failure;
 "open `sandbox/foo.html` and say whether it lands" is not.
 
+### 4b. If workers ran this session, land their state
+
+Delegated work is invisible in `git diff` until it's integrated, so it's the easiest thing
+to lose between sessions. Before moving on:
+
+- **Every slice gets a status row** in the phases table — done, in progress, or blocked,
+  with what's left. If a fan-out created slices that were never written down, write them
+  now.
+- **Unintegrated work goes in `Mid-flight`** — a worker still running, a branch or worktree
+  not merged, a result returned but not yet applied. This is the single most valuable line
+  in the file for a build that spans sessions.
+- **Nothing about the workers themselves.** No agent ids, no token counts, no "spawned 6
+  workers" — that's what happened, and the harness tally already has it. Only where the
+  work stands.
+
 ### 5. Save durable preferences to memory
 
 If the user corrected how you work, or confirmed an approach, write it to your memory
