@@ -1,7 +1,7 @@
 ---
 name: harness
-description: Delegation commands and doctrine. Run a play by name — /harness build, debug, audit, security, refactor, loop — or enter orchestrator mode with /harness agents to dispatch background workers while staying in conversation. Also /harness on|off|status for the cost-tracking hooks. Invoke on any /harness command, or when the user asks about delegating, fan-outs, parallel agents, worker reuse, or what a fleet will cost.
-argument-hint: "[agents | build | debug | audit | security | refactor | loop | on | off | status]"
+description: Delegation doctrine and plays — how to decide whether to hand work to subagents, which model tier to route it to, how to brief a worker that can't see the conversation, and how to verify what comes back. Load this BEFORE any multi-agent work: debugging, building a feature or a design, auditing or researching, a security review, a cross-file refactor or migration, or iterating until something is done. Also handles /harness on|off|agents|status, and any question about delegating, fan-outs, parallel agents, worker reuse, or what a fleet will cost.
+argument-hint: "[on | off | agents | status]"
 ---
 
 # /harness
@@ -13,26 +13,34 @@ decision rather than a reflex: cost it, route it, brief it, verify it.
 project. Delegation wins when the work is bigger than that tax and separable from the chat.
 It loses on everything else, and it loses silently.
 
-## Command table
+## Commands
 
-| Command | Kind | What it does |
+| Command | What it does |
+|---|---|
+| `/harness on` / `off` | Start/stop the cost-tracking hooks and the injected core |
+| `/harness agents` | Orchestrator mode: dispatch in the background, stay conversational. Persists until `/harness agents off` |
+| `/harness status` | Live fleet, spend, reuse rate, whether this is paying off |
+| `/harness` (bare) | Print this table and the current state |
+
+**That's the whole surface.** You don't invoke plays by name — **ask for the work and the
+right play runs.** The table below is how that mapping happens; it is not a list of things
+the user has to memorize.
+
+| The user says something like | Load | Play |
 |---|---|---|
-| `/harness agents` | **mode** — persists | Orchestrator mode: dispatch in the background, stay conversational, integrate as results land |
-| `/harness build <what>` | one-shot | Run the build play — design, front end, back end, or general |
-| `/harness debug <what>` | one-shot | Reproduce, then fan out one hypothesis per worker |
-| `/harness audit <what>` | one-shot | Research or review: fan out by question, every finding cited |
-| `/harness security <scope>` | one-shot | Authorized review by attack surface, findings refuted before reporting |
-| `/harness refactor <what>` | one-shot | Cross-file refactor, migration, or mechanical sweep |
-| `/harness loop <goal>` | one-shot | Iterate until an objective exit fires |
-| `/harness on` / `off` | toggle | Start/stop the cost-tracking hooks |
-| `/harness status` | report | Live fleet, spend, reuse rate, whether this is paying off |
-| `/harness` (bare) | report | Print this table and the current state |
+| "debug this", "why is X broken", "these tests fail" | `references/plays-investigate.md` | debug |
+| "build X", "implement this design", "make the API" | `references/plays-build.md` | build |
+| "audit X", "research Y", "review the codebase" | `references/plays-investigate.md` | research/audit |
+| "check this for vulnerabilities", "security review" | `references/plays-security.md` | security |
+| "rename X everywhere", "refactor Y", "migrate Z" | `references/plays-refactor.md` | refactor |
+| "keep going until it's done", "fix all of them" | `references/topologies.md` | loop-until-dry |
 
-**`/harness loop` is not `/loop`.** The built-in `/loop` re-runs something on a clock. This
-one iterates until a *condition* is met — tests green, two rounds finding nothing new, a
-budget floor. Different job.
+`/harness build|debug|audit|security|refactor|loop <thing>` still works if you'd rather be
+explicit — same behavior, just skips the intent step.
 
----
+**Iterating vs looping.** The built-in `/loop` re-runs something on a clock. The
+loop-until-dry play iterates until a *condition* is met — tests green, two rounds finding
+nothing new, a budget floor. Different jobs.
 
 ## Running a play
 
@@ -44,18 +52,8 @@ obvious. Inline wins when the task is smaller than the boot tax, coupled to this
 conversation, latency-sensitive (visual iteration), or not parallelizable. **Say so and do
 it inline** — running a play because the user typed a command is not a reason to delegate.
 
-**2. Load the play.** Read only the file you need:
-
-| Command | File |
-|---|---|
-| `build` | `references/plays-build.md` |
-| `debug` | `references/plays-investigate.md` |
-| `audit` | `references/plays-investigate.md` |
-| `security` | `references/plays-security.md` |
-| `refactor` | `references/plays-refactor.md` |
-| `loop` | `references/topologies.md` (loop-until-dry) |
-
-Also load `references/work-order.md` before writing the first dispatch, and
+**2. Load the play** named by the trigger table above — only that file. Also load
+`references/work-order.md` before writing the first dispatch, and
 `references/verification.md` when the play calls for a verifier or refuters.
 
 **3. State the shape before dispatching.** One short message to the user: how you're
@@ -66,8 +64,8 @@ they asked for.
 **4. Write slices into `STATE.md` before a fan-out.** The phases table is the build ledger;
 it's what makes a multi-session build resumable. Worker ids and token counts stay out of it.
 
-If the user gave no argument (`/harness build` with nothing after it), ask what to build in
-one line. Don't guess at scope.
+If the scope is genuinely unclear, ask in one line. Don't guess, and don't fan out to
+resolve an ambiguity a question would settle.
 
 ---
 
@@ -164,7 +162,7 @@ Load on demand — don't read them all.
 
 ---
 
-## `on` / `off` / `status`
+## `on` / `off` / `status` — details
 
 **`/harness on` or `off`:**
 
@@ -174,7 +172,8 @@ Load on demand — don't read them all.
 3. Confirm in one line. The injected core starts (or stops) on the next message; other open
    sessions pick it up on their next turn.
 
-**`/harness status`** — read `~/.claude/harness.json` and `~/.claude/harness/{fleet.json,tally.md,mode}`, then report:
+**`/harness status`** — read `~/.claude/harness.json` and
+`~/.claude/harness/{fleet.json,tally.md,mode}`, then report:
 
 - **Effective state** — `enabled`, plus the active mode if any. If the main session model is
   a cheap tier, say **"on, but rarely worth it — the main loop is already cheap"**: there's
