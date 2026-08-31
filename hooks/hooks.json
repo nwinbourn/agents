@@ -35,17 +35,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Task|Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/harness-dispatch.mjs\"",
-            "timeout": 10,
-            "statusMessage": "Costing this dispatch..."
-          }
-        ]
-      },
-      {
         "matcher": "Workflow",
         "hooks": [
           {
@@ -80,27 +69,6 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/wrap-up-arm.mjs\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Task|Agent|SendMessage",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/harness-settle.mjs\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/harness-stop.mjs\"",
             "timeout": 10
           }
         ]

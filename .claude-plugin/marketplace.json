@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "nwinbourn's Claude Code system \u2014 project memory, git-flow sync, delegation harness, output styles, wrap-up.",
-    "version": "0.3.1"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "agents",
       "source": "./",
-      "description": "Per-project memory protocol, shared-branch git sync, a token-aware delegation harness with a plays library, switchable output styles, and the /wrap-up session ritual.",
+      "description": "Per-project memory protocol, shared-branch git sync, a delegation harness (worker reuse, tier routing, background orchestration), output styles, and /wrap-up.",
       "category": "workflow"
     }
   ]

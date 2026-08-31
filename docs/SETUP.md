@@ -64,27 +64,21 @@ Repos without either stay untouched.
 
 ## Optional: the delegation harness
 
-Off until you turn it on. Skip this if you don't use subagents much.
+Skip this if you don't use subagents much.
 
+Create `~/.claude/harness.json`:
+
+```json
+{ "enabled": true, "expensiveModels": ["opus", "fable"], "cheapModels": ["sonnet", "haiku"] }
 ```
-/harness on
-```
 
-That writes `~/.claude/harness.json` with defaults and starts the hooks: a compact
-delegation core injected each turn, a cost estimate before each dispatch, and a tally of
-what workers actually cost. Tune the two numbers that matter in that file:
+That's the whole config — the two model lists are the only thing worth tuning, and they
+only matter if your top tier is named something else.
 
-- `askThresholdTokens` (400k) — a fan-out estimated above this turns into one permission
-  prompt. Raise it if you're prompted too often; lower it if a big fleet has ever
-  surprised you.
-- `expensiveModels` / `cheapModels` — your top and standard tiers.
-
-`/harness status` reports live workers, today's spend, reuse rate, and whether the mode is
-paying for itself. `/harness off` stops all of it; the doctrine in the skill still works by
-hand.
-
-There's a shadow mode too: set `tallyWhenDisabled: true` with `enabled: false` to measure
-what delegation costs you *before* turning the harness on, so the comparison is real.
+From then on a short routing reminder rides along each turn (reuse an existing worker
+before booting one; set `model` deliberately), and a hook checks Workflow scripts for
+routing waste before they run. `/harness agents` switches into orchestrator mode so
+workers run in the background while you keep talking; `/harness off` leaves it.
 
 ## Daily rhythm
 

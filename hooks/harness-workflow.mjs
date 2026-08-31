@@ -2,42 +2,46 @@
 /**
  * harness-workflow — PreToolUse hook on the Workflow tool.
  *
- * A workflow script's agent() calls are dispatched inside the tool, so the
- * per-dispatch hook never sees them. This is the only chance to cost a scripted
- * fan-out before it runs: statically scan the script, resolve each site's model,
- * and total it up.
+ * The one place where tier routing can be checked mechanically instead of hoped
+ * for. A workflow script's `agent()` calls are dispatched inside the tool, so no
+ * per-dispatch hook ever sees them — but the script is right there as text, and
+ * each call's `model:` can be read statically before anything runs.
  *
- * The estimate is a FLOOR, always labelled as one — a site inside a loop
- * dispatches many times, and no static read can know how many.
+ * What it flags, and why each is waste:
+ *   - sites with NO model on an expensive session → they inherit it, so an
+ *     unannotated fan-out is silently an expensive fan-out. The single most
+ *     costly mistake, and invisible without this check.
+ *   - a fan-out where most workers are top tier → fan-outs are parallel
+ *     execution; the judgment happened when the split was chosen. Occasionally
+ *     deliberate, usually not.
+ *   - `fable` sites in a fleet → it's the main loop's model and the verifier of
+ *     last resort, not a worker model.
  *
- * Missing `model` follows the same escalating policy as harness-dispatch:
- * measured from the session's own transcript, silent when inheriting is correct
- * (cheap main loop), a note when it isn't, an ask only when the total is already
- * past threshold. It NEVER denies. The predecessor denied here, which was right
- * for one machine that was always Opus and wrong for anyone else.
+ * It NEVER blocks and never emits an "allow" decision (that would override the
+ * user's own permission settings). It injects a note; the model decides.
  *
- * Verdict "unknown" (opts by reference, spread, helper-built) is always allowed
- * with at most a note — the scanner cannot read those, and a false positive that
- * wedges a valid workflow is worse than the tokens it would save.
+ * Verdict "unknown" — opts by reference, spread, or built by a helper — is never
+ * flagged. The scanner can't read those, and a false positive that wedges a valid
+ * workflow is worse than the tokens it would save.
  *
  * Fail-open: any error exits 0 with no output.
  */
 import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { activeConfig, tierOf } from "./lib/harness-config.mjs";
 import { analyzeScript } from "./lib/workflow-scan.mjs";
-import { bootTax, typicalRun, readTally, fmt } from "./lib/harness-estimate.mjs";
 
-function emit(context, decision, reason) {
-  const out = { hookSpecificOutput: { hookEventName: "PreToolUse" } };
-  if (context) out.hookSpecificOutput.additionalContext = context;
-  if (decision) {
-    out.hookSpecificOutput.permissionDecision = decision;
-    out.hookSpecificOutput.permissionDecisionReason = reason;
-  }
-  process.stdout.write(JSON.stringify(out));
+/** Most sites expensive is worth a word; a couple is normal. */
+const TOP_HEAVY_MIN_SITES = 4;
+const TOP_HEAVY_RATIO = 0.6;
+
+function emit(context) {
+  process.stdout.write(
+    JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: context } }),
+  );
   process.exit(0);
 }
 
+/** The session's own model, read from the tail of its transcript. Null if unreadable. */
 function sessionModel(transcriptPath) {
   if (!transcriptPath) return null;
   try {
@@ -58,23 +62,14 @@ function sessionModel(transcriptPath) {
   }
 }
 
-function normalizeModel(raw, cfg) {
-  const m = String(raw || "").toLowerCase();
-  for (const name of [...cfg.expensiveModels, ...cfg.cheapModels]) {
-    if (m.includes(name)) return name;
-  }
-  return null;
-}
-
 try {
-  const cfg = activeConfig("inject");
+  const cfg = activeConfig();
   if (!cfg) process.exit(0);
 
   const evt = JSON.parse(readFileSync(0, "utf8"));
   const input = evt.tool_input ?? {};
 
-  // A saved workflow invoked by name carries no script — its definition isn't
-  // this session's to police.
+  // A saved workflow invoked by name carries no script — not this session's to police.
   if (!input.script && !input.scriptPath) process.exit(0);
 
   let src = input.script;
@@ -90,61 +85,53 @@ try {
   const sites = analyzeScript(src);
   if (!sites.length) process.exit(0);
 
-  const cwd = evt.cwd || process.cwd();
-  const tally = readTally(cfg);
-
-  // Resolve what a site with no explicit model would inherit.
-  const inherited = normalizeModel(sessionModel(evt.transcript_path), cfg);
+  const inherited = sessionModel(evt.transcript_path);
   const inheritedTier = inherited ? tierOf(inherited, cfg) : "unknown";
 
-  let total = 0;
   const missing = [];
-  const unreadable = [];
-  const byTier = { expensive: 0, cheap: 0, unknown: 0 };
+  const fable = [];
+  let expensive = 0;
+  let readable = 0;
 
   for (const s of sites) {
-    let tier;
-    if (s.verdict === "present" && s.value) {
-      tier = tierOf(s.value, cfg);
-    } else if (s.verdict === "missing") {
+    if (s.verdict === "missing") {
       missing.push(`line ${s.line}`);
-      tier = inheritedTier;
-    } else {
-      unreadable.push(`line ${s.line}`);
-      tier = "unknown";
+      readable++;
+      if (inheritedTier === "expensive") expensive++;
+    } else if (s.verdict === "present" && s.value) {
+      readable++;
+      if (tierOf(s.value, cfg) === "expensive") {
+        expensive++;
+        if (s.value === "fable") fable.push(`line ${s.line}`);
+      }
     }
-    if (tier === "inherit") tier = inheritedTier;
-    byTier[tier === "expensive" ? "expensive" : tier === "cheap" ? "cheap" : "unknown"]++;
-    total += bootTax(cwd, cfg) + typicalRun(tier, "general-purpose", cfg, tally).tokens;
+    // "unknown" verdicts are deliberately not counted — unreadable is not a finding.
   }
-
-  const shape =
-    `${sites.length} agent() site(s) — ${byTier.expensive} top-tier, ${byTier.cheap} cheap, ${byTier.unknown} unresolved`;
-  const floorNote = `≈ ${fmt(total)} at minimum (a FLOOR: a site inside a loop dispatches many times)`;
 
   const notes = [];
+
   if (missing.length && inheritedTier === "expensive") {
+    const shown = missing.slice(0, 8).join(", ") + (missing.length > 8 ? ", …" : "");
     notes.push(
-      `${missing.length} site(s) set no \`model\` (${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ", …" : ""}) and inherit the session model (${inherited}) — costed as top tier. Add \`model: 'sonnet'\` to the execution ones.`,
+      `${missing.length} of ${sites.length} agent() sites set no \`model\` (${shown}), so they inherit this session's ${inherited} — an unannotated fan-out is an expensive fan-out. Add \`model: 'sonnet'\` to the ones that execute a clear spec.`,
     );
-  }
-  if (unreadable.length) {
-    notes.push(`${unreadable.length} site(s) set their model somewhere static analysis can't read (${unreadable.slice(0, 6).join(", ")}) — not checked.`);
+  } else if (missing.length) {
+    notes.push(`${missing.length} agent() site(s) set no \`model\` and will inherit the session model. Set it deliberately.`);
   }
 
-  const context = `[harness] Workflow: ${shape}. ${floorNote}.${notes.length ? " " + notes.join(" ") : ""}`;
+  if (fable.length) {
+    notes.push(`${fable.length} site(s) route to fable (${fable.join(", ")}) — it's the main loop's model and the verifier of last resort, not a worker model.`);
+  }
 
-  if (total > cfg.askThresholdTokens) {
-    emit(
-      context,
-      "ask",
-      `harness: this workflow is estimated at ${fmt(total)} tokens minimum — ${shape} — past your ${fmt(cfg.askThresholdTokens)} threshold. ` +
-        (notes.length ? notes.join(" ") + " " : "") +
-        `Approve to run it, or restructure: route execution sites to sonnet, shrink the fan-out, or split it into phases. Remember this is a floor if any site sits inside a loop.`,
+  if (readable >= TOP_HEAVY_MIN_SITES && expensive / readable >= TOP_HEAVY_RATIO) {
+    notes.push(
+      `${expensive} of ${readable} readable sites are top tier. Fan-outs are usually parallel execution — the judgment happened when you chose the split — so cheap tier plus an objective check is normally the right default for the workers.`,
     );
   }
 
-  emit(context);
+  if (!notes.length) process.exit(0); // routing looks deliberate; say nothing
+
+  emit(`[harness] ${notes.join(" ")}`);
 } catch {
   /* never wedge a workflow on our own bug */
 }

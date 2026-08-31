@@ -1,41 +1,25 @@
-// harness-config — load + validate ~/.claude/harness.json, apply defaults.
+// harness-config — load ~/.claude/harness.json and resolve the harness's paths.
 //
-// Every harness hook calls loadConfig() first. It returns null when the file is
-// absent or unreadable, and a config object with `enabled:false` is treated the
-// same as absent by callers: silent, no state written. A stranger who installs
-// the plugin and never runs `/harness on` pays one node spawn per dispatch and
+// The harness has exactly three jobs: reuse existing workers, route work to the
+// right model tier, and (in `agents` mode) dispatch in the background while the
+// user keeps talking. None of them need much configuration — the only knob that
+// matters is which model names count as your top tier.
+//
+// Silent when the file is absent or `enabled` is false. A user who installs the
+// plugin and never runs `/harness agents` pays one node spawn per turn and
 // nothing else.
 //
-// HARNESS_HOME overrides the state directory (used by tests). Everything lives
-// under <home>/harness/ except the config file itself, which sits at
-// <home>/harness.json next to the other ~/.claude top-level config files.
-//
-// Zero dependencies. Any throw here must be caught by the caller and turned into
-// a silent exit — this module never decides to block anything.
+// HARNESS_HOME overrides the state directory (used by tests). Zero dependencies;
+// every throw here is caught by the caller and turned into a silent exit.
 
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const DEFAULTS = {
-  enabled: false,
-  askThresholdTokens: 400000,
-  dailyAdvisoryTokens: 3000000,
-  burstWindowSeconds: 120,
-  reuseWindowMinutes: 45,
-  baseBootTokens: 12000,
-  bytesPerToken: 4,
-  defaultEstimates: {
-    Explore: 60000,
-    cheap: 200000,
-    expensive: 120000,
-    unknown: 150000,
-  },
-  learnFromTally: true,
-  minSamplesToLearn: 5,
+  enabled: true,
   expensiveModels: ["opus", "fable"],
   cheapModels: ["sonnet", "haiku"],
-  tallyWhenDisabled: false,
 };
 
 /** The ~/.claude directory (or HARNESS_HOME), where harness.json and harness/ live. */
@@ -51,25 +35,22 @@ export function paths() {
     home,
     dir,
     config: join(home, "harness.json"),
-    ledger: join(dir, "fleet.json"),
-    tally: join(dir, "tally.md"),
+    mode: join(dir, "mode"), // `/harness agents` writes the active posture here
     coreOverride: join(home, "harness-core.md"),
   };
 }
 
-/** Shallow-merge user values over DEFAULTS; nested objects (defaultEstimates) merge one level. */
 function withDefaults(raw) {
   const cfg = { ...DEFAULTS, ...raw };
-  cfg.defaultEstimates = { ...DEFAULTS.defaultEstimates, ...(raw.defaultEstimates || {}) };
-  // Coerce the tier lists to lowercase arrays so comparisons are case-insensitive.
-  cfg.expensiveModels = (Array.isArray(cfg.expensiveModels) ? cfg.expensiveModels : DEFAULTS.expensiveModels).map((m) => String(m).toLowerCase());
-  cfg.cheapModels = (Array.isArray(cfg.cheapModels) ? cfg.cheapModels : DEFAULTS.cheapModels).map((m) => String(m).toLowerCase());
+  const list = (v, fallback) => (Array.isArray(v) ? v : fallback).map((m) => String(m).toLowerCase());
+  cfg.expensiveModels = list(cfg.expensiveModels, DEFAULTS.expensiveModels);
+  cfg.cheapModels = list(cfg.cheapModels, DEFAULTS.cheapModels);
   return cfg;
 }
 
 /**
- * Load config. Returns null if the file doesn't exist or can't be parsed — the
- * caller then exits silently. A present-but-partial file is merged over defaults.
+ * Load config. Returns null when the file is missing or unparseable — the caller
+ * then exits silently. A present-but-partial file merges over the defaults.
  */
 export function loadConfig() {
   const { config } = paths();
@@ -83,25 +64,17 @@ export function loadConfig() {
   }
 }
 
-/**
- * True when the harness should DO something this invocation. Enabled config, or
- * a config with tallyWhenDisabled for shadow-mode measurement. Returns the config
- * (truthy) or null so callers can `const cfg = activeConfig(); if (!cfg) exit`.
- * @param {"inject"|"measure"} need — "inject" wants enabled; "measure" also accepts shadow mode.
- */
-export function activeConfig(need = "inject") {
+/** The config if the harness should act this invocation, else null. */
+export function activeConfig() {
   const cfg = loadConfig();
-  if (!cfg) return null;
-  if (cfg.enabled) return cfg;
-  if (need === "measure" && cfg.tallyWhenDisabled) return cfg;
-  return null;
+  return cfg && cfg.enabled ? cfg : null;
 }
 
-/** Classify a model name into "expensive" | "cheap" | "unknown" using the config's tier lists. */
+/** "expensive" | "cheap" | "unknown" | "inherit" (no model set — caller resolves). */
 export function tierOf(model, cfg) {
   const m = String(model ?? "").toLowerCase();
-  if (!m || m === "inherit") return "inherit"; // caller resolves via transcript
-  if (cfg.cheapModels.includes(m)) return "cheap";
-  if (cfg.expensiveModels.includes(m)) return "expensive";
+  if (!m || m === "inherit") return "inherit";
+  if (cfg.cheapModels.some((c) => m.includes(c))) return "cheap";
+  if (cfg.expensiveModels.some((e) => m.includes(e))) return "expensive";
   return "unknown";
 }

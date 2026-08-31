@@ -20,12 +20,10 @@ automatically, switchable output styles, and a session ritual that closes the lo
 - **Enforcement hooks, not good intentions.** A stop hook nags when `STATE.md` goes
   stale. A wrap-up check catches changelog drift. The memory protocol holds because
   the harness holds it, not because anyone remembers to.
-- **A delegation harness.** `/harness` turns subagent work into a decision: cost a
-  fan-out *before* it runs, route by task complexity, reuse workers instead of re-paying
-  their boot cost, and verify high-stakes findings adversarially. No agent-count caps —
-  it estimates tokens and only interrupts when a fleet is genuinely expensive. Ships with
-  a plays library for implementing designs, debugging, back/front ends, security reviews,
-  refactors, and research.
+- **A delegation harness.** `/harness` does three things: reuse a worker you already
+  booted instead of paying a fresh one's startup cost, route work to the right model tier
+  so expensive models don't run cheap work, and an orchestrator mode that dispatches in
+  the background so you keep talking while workers run.
 - **Output styles.** `core` communication rules always apply; one active style
   (`default` / `technical` / `learning` / `terse`) layers on top, switched with
   `/voice`. Each person keeps their own tuned copy.
@@ -93,42 +91,28 @@ project so every agent (not just Claude) reads the same law.
 
 ## The delegation harness
 
-Off by default. `/harness on` writes `~/.claude/harness.json` and starts the hooks.
+Off until you turn it on. `/harness agents` starts orchestrator mode; `/harness off` stops it.
 
-The problem it solves: subagents are cheap to spawn and expensive to spawn *badly*. A
-worker can't see your conversation and re-pays a "boot tax" to learn the project, so a
-six-worker fan-out for six small edits costs several times what doing it inline would.
-The harness makes that arithmetic visible at the moment you can still restructure it.
+Subagents are cheap to spawn and expensive to spawn badly. A worker can't see your
+conversation and re-reads the project to learn it — tens of thousands of tokens before it
+does anything useful. Three rules follow from that:
 
-```
-one worker  = boot tax + typical run
-a fan-out   = N × (boot tax + typical run)     ← said out loud, before dispatching
-```
+- **Reuse before booting.** `ListAgents` shows workers that already exist; `SendMessage`
+  continues one with its context intact — even after it has finished. That skips the
+  startup cost entirely. Reuse for adjacent follow-ups; boot fresh when the domain changes.
+- **Route by task, not by seniority.** Top tier for refactors, architecture, security
+  analysis and subtle logic. Cheap tier for execution from a clear spec. `Explore` for
+  read-only search. A fan-out's workers default cheap — the judgment happened when you
+  chose the split.
+- **Dispatch in the background and keep talking.** Workers run while you and Claude carry
+  on; results integrate as they land. Anything that writes files goes foreground instead,
+  because a backgrounded worker stuck on a permission prompt stalls invisibly.
 
-- **Costs bursts, not calls.** Five 250k workers are each under any sane per-call limit;
-  together they're 1.2M. The harness sums a session's recent dispatches and asks **once**.
-- **Learns your numbers.** Estimates start from shipped defaults and switch to the median
-  of your own measured runs once there's enough data.
-- **Never blocks.** It advises by default and asks above a threshold you set. It never
-  denies a dispatch and never silently grants permissions.
-- **Routes by task.** Top tier for refactors, architecture, and security analysis; cheap
-  tier for execution from a spec; `Explore` for read-only search.
-
-### Commands
-
-| Command | What it does |
-|---|---|
-| `/harness on` / `off` | Start or stop the cost tracking and the injected core |
-| `/harness agents` | Orchestrator mode — dispatch in the background and keep talking; results integrate as they land. Persists until `/harness agents off` |
-| `/harness status` | Live workers, spend, reuse rate, estimate-vs-actual, and an honest recommendation to switch it off if it isn't paying for itself |
-
-**You don't invoke plays by name.** Ask for the work — "debug this", "audit the API",
-"check this for vulnerabilities", "rename it everywhere" — and the matching play runs:
-how to split the work, which tier each slice goes to, and the objective condition that
-means it's finished.
-
-The plays are written procedures, not canned scripts, so they adapt to the repo instead of
-executing blind. Nine of them, in `skills/harness/references/`.
+One piece of that is mechanically enforced rather than advised: a hook reads every
+`agent()` call in a Workflow script *before it runs* and flags the routing waste it can
+actually see — sites with no `model` set (they silently inherit an expensive session
+model), a fan-out where most workers are top tier, or `fable` used as a fleet model. It
+never blocks; it says what it found and lets you decide.
 
 ## License
 
