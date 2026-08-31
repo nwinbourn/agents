@@ -65,6 +65,12 @@ create it unilaterally.
 - **`main` is production.** It auto-deploys (CONTEXT.md says where — Vercel or similar).
   Never commit to `main` directly. `dev → main` merges are rare, deliberate, and done by
   the maintainer.
+- **Never report how far `dev` is ahead of `main`.** Work accumulates on `dev` for weeks
+  between launches — being far ahead IS the flow, not news and not a prompt to act.
+  Don't volunteer the commit distance and don't suggest merging or PR-ing to `main`;
+  releases happen when the maintainer says so. Mention `main` only when the user asks,
+  when they start a release, or when something is genuinely wrong (e.g. a commit landed
+  on `main` directly).
 - **Session start: sync first.** Pull `origin/dev` before working — fast-forward only,
   and only when the tree is clean. Behind with uncommitted changes, diverged, or on
   another branch → tell the user and ask. Never switch branches, merge, or rebase on

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "nwinbourn's Claude Code system — project memory, git-flow sync, autonomous agent harness, output styles, wrap-up.",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   "plugins": [
     {
