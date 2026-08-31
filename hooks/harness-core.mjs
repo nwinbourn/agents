@@ -42,17 +42,46 @@ function emit(context) {
   process.exit(0);
 }
 
-/** Pull the fenced block out of the template; fall back to the whole file if unfenced. */
-function extractCore(src) {
+/**
+ * Pull the fenced block for `mode` out of the template.
+ *
+ * The template holds one `## <name>` section per posture, each wrapping its text
+ * in a fence. `standard` is the everyday core; `agents` is orchestrator mode,
+ * selected by `/harness agents` writing to <harness>/mode. An older single-block
+ * template (no `##` sections) still works — the first fence is used as standard.
+ */
+function extractCore(src, mode) {
+  const sections = {};
+  for (const part of src.split(/^## /m).slice(1)) {
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const name = part.slice(0, nl).trim();
+    const fenced = part.slice(nl + 1).match(/```[^\n]*\n([\s\S]*?)```/);
+    if (fenced) sections[name] = fenced[1].trim();
+  }
+  if (sections[mode]) return sections[mode];
+  if (sections.standard) return sections.standard;
+
+  // Unsectioned template: first fence, or the whole file minus comments.
   const fenced = src.match(/```[^\n]*\n([\s\S]*?)```/);
   const body = (fenced ? fenced[1] : src.replace(/<!--[\s\S]*?-->/g, "")).trim();
   return body || null;
 }
 
-function loadTemplate() {
+/** The active posture, set by `/harness agents`. Absent or unreadable → "standard". */
+function activeMode() {
+  try {
+    const m = readFileSync(join(paths().dir, "mode"), "utf8").trim().toLowerCase();
+    return /^[a-z-]{1,32}$/.test(m) ? m : "standard";
+  } catch {
+    return "standard";
+  }
+}
+
+function loadTemplate(mode) {
   for (const p of [paths().coreOverride, PLUGIN_TEMPLATE]) {
     try {
-      const core = extractCore(readFileSync(p, "utf8"));
+      const core = extractCore(readFileSync(p, "utf8"), mode);
       if (core) return core;
     } catch {
       /* try the next source */
@@ -100,7 +129,7 @@ try {
     /* fleet stays at the empty default */
   }
 
-  emit(loadTemplate().replace(/\{BOOT\}/g, boot).replace(/\{FLEET\}/g, fleet));
+  emit(loadTemplate(activeMode()).replace(/\{BOOT\}/g, boot).replace(/\{FLEET\}/g, fleet));
 } catch {
   /* never cost the user a turn */
 }

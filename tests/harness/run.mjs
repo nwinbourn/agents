@@ -65,12 +65,13 @@ function run(hookName, payload, home, extraEnv = {}) {
 }
 
 /** Fresh state dir. `config` null means "no harness.json at all". */
-function sandbox(config = { enabled: true }, { tally, ledger } = {}) {
+function sandbox(config = { enabled: true }, { tally, ledger, mode } = {}) {
   const home = mkdtempSync(join(tmpdir(), "harness-test-"));
   if (config !== null) writeFileSync(join(home, "harness.json"), JSON.stringify(config));
-  if (tally || ledger) mkdirSync(join(home, "harness"), { recursive: true });
+  if (tally || ledger || mode) mkdirSync(join(home, "harness"), { recursive: true });
   if (tally) writeFileSync(join(home, "harness", "tally.md"), tally);
   if (ledger) writeFileSync(join(home, "harness", "fleet.json"), JSON.stringify(ledger));
+  if (mode) writeFileSync(join(home, "harness", "mode"), mode);
   return home;
 }
 
@@ -167,6 +168,37 @@ check("core surfaces idle workers as reuse candidates", () => {
   const c = ctx(run("harness-core.mjs", { cwd: process.cwd(), session_id: "s1" }, home));
   assert(c.includes("audit routes"), `reuse candidate not surfaced: ${c}`);
   assert(c.includes("ledger thinks"), "ledger should be described as a guess");
+});
+
+check("mode: default posture is the standard core", () => {
+  const home = track(sandbox({ enabled: true }));
+  const c = ctx(run("harness-core.mjs", { cwd: process.cwd(), session_id: "s1" }, home));
+  assert(/\[harness\] ON/.test(c), `expected the standard core: ${c.slice(0, 80)}`);
+  assert(!/ORCHESTRATOR MODE/.test(c), "orchestrator posture leaked into the default");
+});
+
+check("mode: agents swaps in the orchestrator posture", () => {
+  const home = track(sandbox({ enabled: true }, { mode: "agents" }));
+  const c = ctx(run("harness-core.mjs", { cwd: process.cwd(), session_id: "s1" }, home));
+  assert(/ORCHESTRATOR MODE/.test(c), `expected orchestrator posture: ${c.slice(0, 120)}`);
+  assert(/END YOUR TURN after dispatching/.test(c), "missing the end-the-turn instruction");
+  assert(!c.includes("{BOOT}") && !c.includes("{FLEET}"), "placeholders unsubstituted in agents mode");
+});
+
+check("mode: unknown or junk mode falls back to standard", () => {
+  for (const m of ["nonsense", "", "../../etc/passwd", "x".repeat(200)]) {
+    const home = track(sandbox({ enabled: true }, { mode: m }));
+    const c = ctx(run("harness-core.mjs", { cwd: process.cwd(), session_id: "s1" }, home));
+    assert(/\[harness\] ON/.test(c), `mode ${JSON.stringify(m.slice(0, 20))} did not fall back: ${c.slice(0, 80)}`);
+  }
+});
+
+check("mode: a user override template without sections still works", () => {
+  const home = track(sandbox({ enabled: true }, { mode: "agents" }));
+  writeFileSync(join(home, "harness-core.md"), ["```", "my own core, boot {BOOT}", "```", ""].join("\n"));
+  const c = ctx(run("harness-core.mjs", { cwd: process.cwd(), session_id: "s1" }, home));
+  assert(/my own core/.test(c), `unsectioned override ignored: ${c}`);
+  assert(!c.includes("{BOOT}"), "placeholder not substituted in override");
 });
 
 // ------------------------------------------------- missing-model escalation --

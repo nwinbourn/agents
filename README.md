@@ -114,8 +114,21 @@ a fan-out   = N × (boot tax + typical run)     ← said out loud, before dispat
 - **Routes by task.** Top tier for refactors, architecture, and security analysis; cheap
   tier for execution from a spec; `Explore` for read-only search.
 
-Run `/harness status` for live workers, today's spend, reuse rate, estimate-vs-actual, and
-an honest recommendation to turn it off if the tally says it isn't paying for itself.
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/harness agents` | Orchestrator mode — dispatch in the background and keep talking; results integrate as they land. Persists until `/harness agents off`. |
+| `/harness build <what>` | Design, front end, back end, or general build |
+| `/harness debug <what>` | Reproduce, then one hypothesis per worker |
+| `/harness audit <what>` | Research or review — fan out by question, every finding cited |
+| `/harness security <scope>` | Authorized review by attack surface; High/Critical findings refuted before you see them |
+| `/harness refactor <what>` | Cross-file refactor, migration, or mechanical sweep |
+| `/harness loop <goal>` | Iterate until an objective exit fires (not the interval-based `/loop`) |
+| `/harness status` | Live workers, spend, reuse rate, estimate-vs-actual, and an honest recommendation to switch it off if it isn't paying for itself |
+
+Each play is a written procedure, not a canned script — it adapts to the repo instead of
+executing blind. The doctrine behind them lives in `skills/harness/references/`.
 
 ## License
 
