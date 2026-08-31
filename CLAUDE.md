@@ -20,5 +20,9 @@ Repo-only rules:
   `${CLAUDE_PLUGIN_ROOT}` — never absolute paths.
 - Nothing personal ships here: no names in hook output, no account-specific caps, no
   machine paths. Personal tuning lives in each user's `~/.claude/`.
+- **Never put tests in this repo** — it is the shipped product only. Test suites live
+  in `~/Projects/skills-lab/tests/` (Noah's rule, 2026-08-30); `tests/harness/` there
+  exercises this repo's hooks. Run it after any hook change:
+  `node ~/Projects/skills-lab/tests/harness/run.mjs`.
 - Version bump `.claude-plugin/plugin.json` (and marketplace.json) on any change a
   user would receive.
