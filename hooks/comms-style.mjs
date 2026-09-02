@@ -7,6 +7,8 @@
 //   3. a tiny built-in fallback        — so the voice never fully vanishes
 //
 // Which style is active lives in ~/.claude/active-style (switched via /voice).
+// The reserved word `off` there suppresses the styling and cancels the mirrored
+// copy of it in ~/.claude/CLAUDE.md, so `off` actually means off.
 // This hook is delivery only — edit outputs.md to change what's injected.
 //
 // Escape hatches (short, typed messages only — long text is a paste, and pasted
@@ -64,6 +66,21 @@ function styleContext(blocks, name) {
   return `Output style for this turn: ${used} (the user switches styles with /voice)\n\n[core — always applies]\n${blocks.core ?? ''}\n\n[${used}]\n${style ?? ''}`;
 }
 
+// `/voice off`. The style library is mirrored by hand into ~/.claude/CLAUDE.md as a
+// safety net for when this hook fails, so staying silent here would leave that copy
+// still steering the voice. Cancel it explicitly instead — and name the one section,
+// so the rest of CLAUDE.md (git, coding, memory protocol) keeps applying.
+const OFF_CONTEXT = `Output style for this turn: off (the user ran \`/voice off\`).
+
+Ignore the "How I talk to Noah" section of ~/.claude/CLAUDE.md. Its core/default blocks
+are a hand-synced mirror of the style library this hook normally injects, and they do not
+apply while voice is off. EVERY OTHER section of that file still applies in full.
+
+Write in your own default voice. The user turns styling back on with \`/voice <style>\`.`;
+
+// Route `active` through here; hardcoded style names stay direct.
+const contextFor = (blocks, name) => (name === 'off' ? OFF_CONTEXT : styleContext(blocks, name));
+
 let data = {};
 try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch {}
 const prompt = String(data.prompt ?? data.user_prompt ?? data.message ?? '');
@@ -96,11 +113,11 @@ const HOLD_ON = /\bstay technical\b|\bkeep it technical\b/i;
 const HOLD_OFF = /\b(back to (plain|normal)|plain english again|stop being technical|normal mode|skip the technical|no more technical)\b/i;
 const ONE_SHOT = /\bexplain the technical side\b|\bshow me what you did\b|\bwalk me through (what|how) you\b|\b(give me the )?technical details?\b/i;
 
-if (HOLD_OFF.test(typed)) { try { unlinkSync(flag); } catch {} emit(styleContext(blocks, active)); }
+if (HOLD_OFF.test(typed)) { try { unlinkSync(flag); } catch {} emit(contextFor(blocks, active)); }
 if (!NEGATED.test(typed)) {
   if (HOLD_ON.test(typed)) { try { writeFileSync(flag, '1'); } catch {} emit(styleContext(blocks, 'technical')); }
   if (existsSync(flag)) emit(styleContext(blocks, 'technical'));
   if (ONE_SHOT.test(typed)) emit(styleContext(blocks, 'technical'));
 }
 if (existsSync(flag)) emit(styleContext(blocks, 'technical'));
-emit(styleContext(blocks, active));
+emit(contextFor(blocks, active));
