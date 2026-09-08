@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tests/run.mjs
+      - run: node tests/ci.mjs
   plugin-artifact:
     needs: test
     runs-on: ubuntu-latest

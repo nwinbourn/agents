@@ -28,7 +28,8 @@ cross-platform CI and live agent evaluation remain separate release checks.
 
 ## Continuous integration
 
-`.github/workflows/tests.yml` runs the same command on Windows, macOS and Linux.
+`.github/workflows/tests.yml` runs the suite on Windows, macOS and Linux through
+`tests/ci.mjs`, which exposes failed assertions in public check annotations.
 The workflow also offers an artifact containing only the plugin directory after all
 test jobs pass. Hosted CI results exist only after the change is pushed and runs.
 
