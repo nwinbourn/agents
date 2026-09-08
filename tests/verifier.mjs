@@ -98,7 +98,7 @@ try {
   });
   test('project root is resolved from a nested working directory',()=>{
     const dir=local();mkdirSync(join(dir,'src'));const r=verify(join(dir,'src'));
-    assert.equal(r.status,'passed');assert.equal(realpathSync(r.project),realpathSync(dir));
+    assert.equal(r.status,'passed');assert.equal(realpathSync.native(r.project),realpathSync.native(dir));
   });
   test('docs handoff is supported',()=>{
     const dir=local();mkdirSync(join(dir,'docs'));git(dir,'mv','STATE.md','docs/STATE.md');save(dir);

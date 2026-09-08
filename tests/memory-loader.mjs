@@ -49,7 +49,7 @@ try {
     let output=load(dir);assert(output.includes(state));assert(output.includes('pitfall-marker'));assert(output.includes('design-marker'));
     write(dir,'STATE.md',state+'root-priority');output=load(dir);assert(output.includes('root-priority'));
     const r=spawnSync(process.execPath,[join(HOOKS,'wrap-up-verify.mjs'),'--project',dir],{env,encoding:'utf8'});
-    assert.equal(realpathSync(JSON.parse(r.stdout).checks.find(c=>c.id==='handoff').path),realpathSync(join(dir,'STATE.md')));
+    assert.equal(realpathSync.native(JSON.parse(r.stdout).checks.find(c=>c.id==='handoff').path),realpathSync.native(join(dir,'STATE.md')));
   });
   test('partial adoption names missing required memory without inventing it',()=>{
     const dir=local(false);write(dir,'CONTEXT.md','context-only');assert.match(load(dir),/Missing required memory: STATE.md/);
