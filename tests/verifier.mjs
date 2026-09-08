@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -98,7 +98,7 @@ try {
   });
   test('project root is resolved from a nested working directory',()=>{
     const dir=local();mkdirSync(join(dir,'src'));const r=verify(join(dir,'src'));
-    assert.equal(r.status,'passed');assert.equal(r.project.replaceAll('\\','/'),dir.replaceAll('\\','/'));
+    assert.equal(r.status,'passed');assert.equal(realpathSync(r.project),realpathSync(dir));
   });
   test('docs handoff is supported',()=>{
     const dir=local();mkdirSync(join(dir,'docs'));git(dir,'mv','STATE.md','docs/STATE.md');save(dir);

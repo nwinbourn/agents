@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, utimesSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -49,7 +49,7 @@ try {
     let output=load(dir);assert(output.includes(state));assert(output.includes('pitfall-marker'));assert(output.includes('design-marker'));
     write(dir,'STATE.md',state+'root-priority');output=load(dir);assert(output.includes('root-priority'));
     const r=spawnSync(process.execPath,[join(HOOKS,'wrap-up-verify.mjs'),'--project',dir],{env,encoding:'utf8'});
-    assert.equal(JSON.parse(r.stdout).checks.find(c=>c.id==='handoff').path,join(dir,'STATE.md'));
+    assert.equal(realpathSync(JSON.parse(r.stdout).checks.find(c=>c.id==='handoff').path),realpathSync(join(dir,'STATE.md')));
   });
   test('partial adoption names missing required memory without inventing it',()=>{
     const dir=local(false);write(dir,'CONTEXT.md','context-only');assert.match(load(dir),/Missing required memory: STATE.md/);
