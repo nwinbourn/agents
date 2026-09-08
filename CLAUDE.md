@@ -1,11 +1,11 @@
 # agents (this repo)
 
-@import templates/AGENTS.md
+@import plugin/templates/AGENTS.md
 
 Local `CONTEXT.md` / `STATE.md` are the maintainer's private tracking — untracked and
 gitignored, never published. Read them if they exist on this machine.
 
-This repo eats its own dogfood: `templates/AGENTS.md` is both the template we ship AND
+This repo eats its own dogfood: `plugin/templates/AGENTS.md` is both the template we ship AND
 the live protocol for working on this repo itself (one home per fact — no separate
 copy). **Work on `main`** — this is a plugin repo, not a live auto-deploying site, so
 the `dev` flow in that template does not apply here.
@@ -16,13 +16,13 @@ Repo-only rules:
   Linux). Path handling via `node:path` / `homedir()`; nothing shell-specific.
 - Every hook must fail SILENT and exit 0 on unexpected errors — a broken hook must
   never break someone's session start.
-- Hooks reference their own files via `import.meta.url`, and `hooks/hooks.json` uses
+- Hooks reference their own files via `import.meta.url`, and `plugin/hooks/hooks.json` uses
   `${CLAUDE_PLUGIN_ROOT}` — never absolute paths.
 - Nothing personal ships here: no names in hook output, no account-specific caps, no
   machine paths. Personal tuning lives in each user's `~/.claude/`.
-- **Never put tests in this repo** — it is the shipped product only. Test suites live
-  in `~/Projects/skills-lab/tests/` (Noah's rule, 2026-08-30); `tests/harness/` there
-  exercises this repo's hooks. Run it after any hook change:
-  `node ~/Projects/skills-lab/tests/harness/run.mjs`.
-- Version bump `.claude-plugin/plugin.json` (and marketplace.json) on any change a
+- Public tests are committed in this repository under `tests/` as evidence. The installable
+  payload is `plugin/`; never put tests, generated fixtures or test dependencies there.
+  Run `node tests/run.mjs` after hook or packaging changes. The suite needs Node 22+
+  and Git, has no package dependencies, and runs against an isolated plugin copy.
+- Version bump `plugin/.claude-plugin/plugin.json` (and `.claude-plugin/marketplace.json`) on any change a
   user would receive.

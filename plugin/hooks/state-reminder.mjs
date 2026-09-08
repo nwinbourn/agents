@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Stop hook: enforces the per-project memory protocol.
+// Stop hook: reminds the agent about potentially stale project memory.
 // Fires when Claude finishes a turn. If the project has a STATE.md and project
 // files have changed more recently than STATE.md was last updated, it blocks the
 // stop once and tells Claude to update STATE.md. Self-silences after the update
@@ -10,23 +10,22 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
 
 let raw = '';
 try { raw = fs.readFileSync(0, 'utf8'); } catch {}
 let data = {};
 try { data = JSON.parse(raw || '{}'); } catch {}
+if (!data || typeof data !== 'object' || Array.isArray(data) ||
+    (data.cwd != null && typeof data.cwd !== 'string')) process.exit(0);
 
 // Already reminded this stop cycle — let Claude stop.
 if (data.stop_hook_active) process.exit(0);
 
-const projectDir = data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const projectDir = resolveProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()).root;
 
 // Find STATE.md (project root or docs/). No STATE.md => protocol not adopted => stay silent.
-const candidates = [
-  path.join(projectDir, 'STATE.md'),
-  path.join(projectDir, 'docs', 'STATE.md'),
-];
-const statePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+const statePath = findMemoryFile(projectDir, 'STATE');
 if (!statePath) process.exit(0);
 
 let stateMtime;
@@ -51,7 +50,7 @@ function walk(dir) {
     if (full === statePath) continue;
     let m;
     try { m = fs.statSync(full).mtimeMs; } catch { continue; }
-    // >2s newer than STATE.md means real work happened since the last state update.
+    // A >2s mtime difference is a heuristic, not proof of a semantic state change.
     if (m > stateMtime + 2000) { stale = true; return; }
   }
 }

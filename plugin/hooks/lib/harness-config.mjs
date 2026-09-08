@@ -19,13 +19,12 @@ import { join } from "node:path";
 export const DEFAULTS = {
   expensiveModels: ["opus", "fable"],
   cheapModels: ["sonnet", "haiku"],
-  // Per-tier parallel fan-out caps — the harness's one interruption. MORE than
-  // this many workers of a tier inside one burst window becomes a permission
+  // Per-tier best-effort burst limits — the harness's one interruption. MORE than
+  // this many dispatch attempts of a tier inside one burst window becomes a permission
   // prompt; the user decides, the harness never blocks on its own. haiku is
   // deliberately uncapped.
   caps: { fable: 3, opus: 15, sonnet: 30 },
-  // Dispatches within this many seconds count as one fan-out for the caps. A
-  // paced sequence spread wider than this never accumulates — it isn't a burst.
+  // Fixed window from its first dispatch attempt; does not track completions.
   capWindowSeconds: 120,
 };
 
@@ -43,7 +42,7 @@ export function paths() {
     dir,
     config: join(home, "harness.json"),
     mode: join(dir, "mode"), // "on" | "agents" | anything else = off
-    counts: join(dir, "counts.json"), // rolling per-tier fan-out counter
+    counts: join(dir, "counts.json"), // fixed-window dispatch-attempt counter
     coreOverride: join(home, "harness-core.md"),
   };
 }
@@ -75,6 +74,12 @@ export function loadConfig() {
   cfg.expensiveModels = list(cfg.expensiveModels, DEFAULTS.expensiveModels);
   cfg.cheapModels = list(cfg.cheapModels, DEFAULTS.cheapModels);
   cfg.caps = { ...DEFAULTS.caps, ...(raw.caps && typeof raw.caps === "object" ? raw.caps : {}) };
+  for (const [tier, cap] of Object.entries(cfg.caps)) {
+    if (!Number.isSafeInteger(cap) || cap < 0) {
+      if (Object.hasOwn(DEFAULTS.caps, tier)) cfg.caps[tier] = DEFAULTS.caps[tier];
+      else delete cfg.caps[tier];
+    }
+  }
   if (!Number.isFinite(cfg.capWindowSeconds) || cfg.capWindowSeconds <= 0) cfg.capWindowSeconds = DEFAULTS.capWindowSeconds;
   delete cfg.enabled; // legacy field from pre-0.8 — the mode file is the only switch
   return cfg;

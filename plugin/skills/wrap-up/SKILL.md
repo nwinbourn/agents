@@ -170,7 +170,8 @@ git rev-parse --verify --quiet refs/remotes/origin/dev
 **No `origin/dev`** → the normal case: work is on `main`. Show what would be committed
 and ask. Pushing is the user's call. Never sweep in files the user was working on
 themselves — check `git status` for anything you didn't touch and exclude it explicitly.
-**Do not create a `dev` branch** — its absence is not a gap to fill. Done.
+**Do not create a `dev` branch** — its absence is not a gap to fill. Continue to step 8
+even if publication is not requested.
 
 **`origin/dev` exists** → `dev` must end the session committed and pushed, because
 unpushed work (including the memory updates from steps 3–6) is invisible to every other
@@ -188,8 +189,38 @@ person and their agents:
 3. **Push with the user's go-ahead** — show what's going up first. If the push is
    rejected because the remote moved again: fetch, merge, retry once, then report
    honestly.
-4. **Verify** — `git status` clean and `git rev-list --count origin/dev..dev` returns 0.
-   Only then is the session actually closed.
+4. **Verify** — run step 8 after the final edit, commit and approved push.
+   A cached origin/dev comparison alone does not establish that the live remote matches.
+
+### 8. Verify the handoff mechanically
+
+After the final changes and any authorized Git operations, run the plugin's command,
+resolving its root from this skill's location:
+
+```sh
+node "<plugin-root>/hooks/wrap-up-verify.mjs" --project "<project-directory>" --check-remote
+```
+
+This explicit command reports JSON with `passed`, `incomplete` or `unknown` for
+each check. Exit codes are 0, 1 and 2 respectively; a nonzero result is evidence to
+interpret, not a reason to bypass the checks. It never commits, pushes, fetches,
+switches branches or edits project files. The remote flag queries origin/dev only
+when the existing shared-dev workflow is adopted.
+
+- **Passed:** mechanical checks succeeded. Review memory accuracy, agreed commit
+  scope, ignored work and outstanding workers separately before calling wrap-up complete.
+- **Incomplete:** report and resolve the named issues within the user's authorized
+  scope. Never sweep unrelated work into a commit to obtain a clean result.
+- **Unknown:** report what could not be verified. A missing/offline remote or skipped
+  remote check cannot justify saying the shared handoff is complete.
+
+Rerun after fixing an issue or changing files. For local projects, a passing result
+does not claim publication; commits and pushing remain the user's decision. If the
+user chooses to leave work uncommitted, state that choice and the incomplete result.
+An accurate Mid-flight field can describe unfinished work; its presence alone never
+proves that the work is finished. Results are a point-in-time snapshot.
+
+Details and check boundaries: `docs/WRAP-UP-VERIFIER.md` in the plugin.
 
 ## If the project has no `STATE.md`
 

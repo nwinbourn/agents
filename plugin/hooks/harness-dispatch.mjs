@@ -4,7 +4,7 @@
  *
  * The harness's one interruption, applied to individual dispatches. Each
  * worker's tier is resolved (its explicit `model`, or the session model it
- * inherits when none is set) and added to a rolling burst counter; a dispatch
+ * inherits when none is set) and added to a fixed-window attempt counter; a dispatch
  * that takes a tier PAST its cap becomes a permission prompt with the count in
  * front of the user. Under the caps it is completely silent — routing is the
  * orchestrator's job and the harness has nothing to say about it. It never
@@ -13,6 +13,7 @@
  * Fail-open: any error exits 0 with no output.
  */
 import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { recordIssue } from "./lib/harness-diagnostics.mjs";
 import { activeConfig } from "./lib/harness-config.mjs";
 import { addAndCheck } from "./lib/harness-counter.mjs";
 
@@ -72,17 +73,17 @@ try {
   // attributed to a tier; don't guess.
   const inherits = !declared || String(declared).toLowerCase() === "inherit";
   const key = inherits ? capKey(sessionModel(evt.transcript_path), cfg) : capKey(declared, cfg);
-  if (!key) process.exit(0);
+  if (!key) { recordIssue('dispatch', 'unrecognized-model'); process.exit(0); }
 
-  const { exceeded } = addAndCheck({ [key]: 1 }, cfg, Date.now());
+  const { exceeded } = addAndCheck({ [key]: 1 }, cfg);
   const hit = exceeded.find((e) => e.tier === key);
   if (hit) {
     ask(
-      `harness: that's ${hit.count} ${hit.tier} workers inside ${cfg.capWindowSeconds}s (cap ${hit.cap} in parallel). ` +
+      `harness: that's ${hit.count} ${hit.tier} dispatch attempts inside ${cfg.capWindowSeconds}s (cap ${hit.cap}; not active workers). ` +
         `Approve to launch it anyway, or deny and the extra work gets re-routed to a cheaper tier or run in sequence.`,
     );
   }
 } catch {
-  /* never wedge a dispatch on our own bug */
+  recordIssue('dispatch', 'hook-error');
 }
 process.exit(0);

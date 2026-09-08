@@ -23,11 +23,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordIssue } from "./lib/harness-diagnostics.mjs";
 import { activeConfig, paths } from "./lib/harness-config.mjs";
 
 const PLUGIN_TEMPLATE = join(dirname(fileURLToPath(import.meta.url)), "..", "templates", "harness-core.md");
 
-const FALLBACK = `[harness] ON — reuse before booting: ListAgents shows existing workers; SendMessage continues one with its context intact. Route models yourself — cheap for mechanical work, sonnet for normal work (fan-outs default to sonnet), top tier only for genuinely hard work; never ask the user to pick a model. Run delegated work in the background and fold results in as they land.`;
+const FALLBACK = `[harness] ON — reuse before booting: ListAgents shows existing workers; SendMessage continues one with its context intact. Route models yourself — cheap for mechanical work, sonnet for normal work (fan-outs default to sonnet), top tier only for genuinely hard work; never ask the user to pick a model. Delegate independent work when useful. Reuse only current context. Work orders define allowed files (one writer per file), dependencies and acceptance checks. Run work in the background; review and verify results before marking done.`;
 
 function emit(context) {
   process.stdout.write(
@@ -77,6 +78,6 @@ try {
   if (!cfg) process.exit(0); // off — say nothing, cost nothing
   emit(loadTemplate(cfg.mode));
 } catch {
-  /* never cost the user a turn */
+  recordIssue('core', 'hook-error');
 }
 process.exit(0);

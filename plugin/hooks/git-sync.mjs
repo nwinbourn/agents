@@ -12,36 +12,34 @@
 //   - IF on dev, clean tree, strictly behind: fast-forward pull — the one git
 //     operation that cannot lose local work
 //   - everything else (dirty, diverged, other branch): report via context and
-//     leave the decision to the human. Never checkout, merge, rebase, or reset.
+//     leave the decision to the human. Never checkout, perform a non-fast-forward merge, rebase, or reset.
 //
 // Silent exit in repos that don't use the flow (no git, no origin/dev), so it's
 // safe to run globally. Any unexpected error exits 0 — never break session start.
 
-import { execFileSync } from 'node:child_process';
+import { inspectProject, runGit } from './lib/project-inspection.mjs';
 import { readFileSync } from 'node:fs';
 
 let raw = '';
 try { raw = readFileSync(0, 'utf8'); } catch {}
 let data = {};
 try { data = JSON.parse(raw || '{}'); } catch {}
+if (!data || typeof data !== 'object' || Array.isArray(data) ||
+    (data.cwd != null && typeof data.cwd !== 'string')) process.exit(0);
 
-const cwd = data.cwd || process.cwd();
+const project = inspectProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+const cwd = project.root;
 if (String(data.source || '') === 'compact') process.exit(0); // matcher covers this; double-guard
 
 const BRANCH = 'dev';
 
-function git(args, timeout = 8000) {
-  return execFileSync('git', args, {
-    cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-function tryGit(args, timeout) {
-  try { return git(args, timeout); } catch { return null; }
+function tryGit(args, timeout = 8000) {
+  const result = runGit(cwd, args, timeout);
+  return result.ok ? result.output.trim() : null;
 }
 
 // Not a git repo, or the flow isn't adopted here → stay silent.
-if (tryGit(['rev-parse', '--is-inside-work-tree']) !== 'true') process.exit(0);
-if (tryGit(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${BRANCH}`]) === null) process.exit(0);
+if (!project.isGit || project.workflow !== 'shared-dev') process.exit(0);
 
 const fetched = tryGit(['fetch', 'origin', BRANCH, '--quiet'], 15000) !== null;
 
@@ -61,7 +59,7 @@ if (branch === BRANCH) {
     const oldHead = tryGit(['rev-parse', 'HEAD']);
     const ok = tryGit(['merge', '--ff-only', `origin/${BRANCH}`], 15000) !== null;
     if (ok) {
-      lines.push(`Pulled ${behind} new commit(s) from origin/${BRANCH} (fast-forward — nothing local was touched).`);
+      lines.push(`Pulled ${behind} new commit(s) from origin/${BRANCH} (fast-forward — no local work was overwritten).`);
       const changed = oldHead ? (tryGit(['diff', '--name-only', `${oldHead}..HEAD`]) ?? '') : '';
       const memChanged = changed.split('\n').filter((f) => /(^|\/)(STATE|CONTEXT|PITFALLS|DESIGN)\.md$/.test(f));
       if (memChanged.length) {

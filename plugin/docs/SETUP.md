@@ -58,9 +58,14 @@ preview builds) and record where it deploys in `CONTEXT.md`. From that moment th
 session-start sync and the wrap-up push activate on their own — they key off
 `origin/dev` existing, and stay silent everywhere else.
 
-That's the whole adoption. The hooks detect it from here: `origin/dev` existing turns
-on the session-start sync, a `STATE.md` existing turns on the memory enforcement.
-Repos without either stay untouched.
+Startup now runs sync and memory loading in order. It loads STATE, CONTEXT and
+existing PITFALLS/DESIGN after the sync attempt, using the Git working-tree root
+even from a subfolder. Missing required memory is explicit. See
+[session memory](SESSION-MEMORY.md) for discovery rules and size limits.
+
+That's the whole adoption. A recorded `origin/dev` enables sync. STATE or CONTEXT
+enables startup memory loading; STATE enables the staleness reminder. Shared dev
+projects also get notices when required memory is missing. Other projects stay silent.
 
 ## Optional: the agent harness
 
@@ -73,8 +78,9 @@ Off until you turn it on — no config file needed:
 From then on Claude manages delegation itself: it reuses existing background agents
 instead of spawning fresh ones, routes each task to an appropriately priced model
 (fan-outs default to Sonnet), and runs delegated work asynchronously. You never pick
-models. The only time it asks anything: a parallel fan-out bigger than 3 fable /
-15 opus / 30 sonnet agents gets one permission prompt before launching.
+models. The hooks ask only above their best-effort burst limits (3 fable / 15 opus /
+30 sonnet by default). They count dispatch attempts or static workflow call sites,
+not active workers. Loops, denied attempts and unrecognized models limit accuracy.
 
 `/harness agents` is the chat-while-they-work mode — you keep talking, planning, and
 reviewing with the main agent while workers handle implementation in the background.
@@ -86,9 +92,15 @@ To change the caps, create `~/.claude/harness.json`:
 { "caps": { "fable": 3, "opus": 15, "sonnet": 30 }, "capWindowSeconds": 120 }
 ```
 
+Use `/harness status` to inspect the global mode, burst counts and timestamped
+diagnostics. The mode and counter are shared across projects and sessions. Hooks
+stay silent on errors; status is the explicit place to investigate them. Personal
+`~/.claude/harness-core.md` overrides still win: incorporate the new ownership and
+verification rules there if you maintain an override.
+
 ## Daily rhythm
 
-- **Open a session** → the sync hook has already pulled `dev` if it was safe; if
+- **Open a session** → startup has synced `dev` if safe and loaded current project memory; if
   anything needs a decision (dirty tree, diverged branch), Claude tells you before work
   starts. Ask "what's next?" — the answer comes from `STATE.md`.
 - **Work** → normal. Claude keeps `STATE.md` honest as things move.

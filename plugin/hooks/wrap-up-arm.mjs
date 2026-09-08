@@ -12,18 +12,21 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveProject } from './lib/project-inspection.mjs';
 import crypto from 'node:crypto';
 
 let raw = '';
 try { raw = fs.readFileSync(0, 'utf8'); } catch {}
 let data = {};
 try { data = JSON.parse(raw || '{}'); } catch {}
+if (!data || typeof data !== 'object' || Array.isArray(data) ||
+    (data.cwd != null && typeof data.cwd !== 'string')) process.exit(0);
 
 if (data.tool_name !== 'Skill') process.exit(0);
 const skillName = String(data.tool_input?.skill ?? '');
 if (!/(^|:)wrap-up$/.test(skillName)) process.exit(0); // matches 'wrap-up' and plugin-namespaced 'agents:wrap-up'
 
-const projectDir = data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const projectDir = resolveProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()).root;
 const markerDir = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.claude', 'hooks', '.wrapup-armed');
 const key = crypto.createHash('sha1').update(projectDir).digest('hex').slice(0, 16);
 const markerPath = path.join(markerDir, `${key}.json`);

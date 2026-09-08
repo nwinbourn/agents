@@ -15,6 +15,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
@@ -22,11 +23,13 @@ let raw = '';
 try { raw = fs.readFileSync(0, 'utf8'); } catch {}
 let data = {};
 try { data = JSON.parse(raw || '{}'); } catch {}
+if (!data || typeof data !== 'object' || Array.isArray(data) ||
+    (data.cwd != null && typeof data.cwd !== 'string')) process.exit(0);
 
 // Already reminded this stop cycle — let Claude stop.
 if (data.stop_hook_active) process.exit(0);
 
-const projectDir = data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const projectDir = resolveProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()).root;
 const markerDir = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.claude', 'hooks', '.wrapup-armed');
 const key = crypto.createHash('sha1').update(projectDir).digest('hex').slice(0, 16);
 const markerPath = path.join(markerDir, `${key}.json`);
@@ -36,14 +39,10 @@ try { marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')); } catch { proces
 try { fs.unlinkSync(markerPath); } catch {} // consume unconditionally — fires at most once per wrap-up call
 
 const MAX_MARKER_AGE_MS = 30 * 60 * 1000; // 30 min — generous for a long wrap-up, short enough not to misfire on a much-later unrelated Stop
-if (!marker.armedAt || Date.now() - marker.armedAt > MAX_MARKER_AGE_MS) process.exit(0);
+if (!marker || !marker.armedAt || Date.now() - marker.armedAt > MAX_MARKER_AGE_MS) process.exit(0);
 
 // Find STATE.md (project root or docs/). No STATE.md => protocol not adopted => stay silent.
-const candidates = [
-  path.join(projectDir, 'STATE.md'),
-  path.join(projectDir, 'docs', 'STATE.md'),
-];
-const statePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+const statePath = findMemoryFile(projectDir, 'STATE');
 if (!statePath) process.exit(0);
 
 let currentLines;

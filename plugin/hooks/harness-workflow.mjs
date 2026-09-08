@@ -2,8 +2,8 @@
 /**
  * harness-workflow — PreToolUse hook on the Workflow tool.
  *
- * A workflow is one atomic parallel fan-out: its `agent()` calls all dispatch
- * inside the tool, where no per-dispatch hook can see them. So this reads the
+ * A workflow is inspected statically: written call sites are not runtime
+ * executions or concurrency (loops and sequential calls differ). This reads the
  * script as text first, resolves each call's tier (its explicit `model`, or the
  * session model it inherits when none is set), and counts them.
  *
@@ -13,8 +13,8 @@
  * `model` is silently a whole fleet of that model. Under the caps it is
  * completely silent, and it never denies or allows on its own.
  *
- * A workflow is checked as its own snapshot — it does not touch the rolling
- * dispatch counter — so denying and re-submitting a re-routed script counts
+ * A workflow is checked as its own snapshot — it does not touch the fixed-window
+ * dispatch-attempt counter — so denying and re-submitting a re-routed script counts
  * fresh rather than stacking on the rejected version.
  *
  * "unknown" sites (model built by a helper, spread, or a variable) can't be
@@ -24,6 +24,7 @@
  * Fail-open: any error exits 0 with no output.
  */
 import { readFileSync } from "node:fs";
+import { recordIssue } from "./lib/harness-diagnostics.mjs";
 import { activeConfig } from "./lib/harness-config.mjs";
 import { analyzeScript } from "./lib/workflow-scan.mjs";
 import { statSync, openSync, readSync, closeSync } from "node:fs";
@@ -76,13 +77,14 @@ try {
 
   const evt = JSON.parse(readFileSync(0, "utf8"));
   const input = evt.tool_input ?? {};
-  if (!input.script && !input.scriptPath) process.exit(0); // a named saved workflow carries no script
+  if (!input.script && !input.scriptPath) { recordIssue('workflow', 'script-unavailable'); process.exit(0); } // a named saved workflow carries no script
 
   let src = input.script;
   if (typeof src !== "string" && input.scriptPath) {
     try {
       src = readFileSync(String(input.scriptPath), "utf8");
     } catch {
+      recordIssue('workflow', 'script-unreadable');
       process.exit(0);
     }
   }
@@ -95,6 +97,7 @@ try {
 
   const counts = {}; // tier → number of sites
   let missing = 0;
+  let uncounted = false;
   for (const s of sites) {
     let key = null;
     if (s.verdict === "present" && s.value) key = capKey(s.value, cfg);
@@ -104,7 +107,10 @@ try {
     }
     // "unknown" verdicts are unreadable — never counted.
     if (key) counts[key] = (counts[key] || 0) + 1;
+    else uncounted = true;
   }
+
+  if (uncounted) recordIssue('workflow', 'uncounted-model-site');
 
   const exceeded = Object.entries(counts)
     .filter(([tier, n]) => Number.isFinite(cfg.caps?.[tier]) && n > cfg.caps[tier])
@@ -116,10 +122,10 @@ try {
     missing && inheritedKey ? ` ${missing} of the sites set no model, so they inherit this session's ${inheritedKey}.` : "";
 
   ask(
-    `harness: this workflow fans out ${exceeded.join(", ")} in parallel.${inheritNote} ` +
+    `harness: this workflow contains ${exceeded.join(", ")} written agent call sites; runtime concurrency is unknown.${inheritNote} ` +
       `Approve to run it as-is, or deny and the fan-out gets re-routed (sonnet is the default for fan-out workers) or split into smaller phases.`,
   );
 } catch {
-  /* never wedge a workflow on our own bug */
+  recordIssue('workflow', 'hook-error');
 }
 process.exit(0);
