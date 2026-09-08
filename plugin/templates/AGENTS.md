@@ -59,6 +59,22 @@ because this section exists. If a live, auto-deploying project with more than on
 clearly should have `dev` and doesn't, say so and get an explicit go-ahead — never
 create it unilaterally.
 
+```text
+main   ────────────────●──────────────────────●────   production (auto-deploys)
+                      ↑                      ↑
+                    merge                  merge      ← rare, deliberate
+                      │                      │
+dev    ──●──●──●──●───●──●──●──●──●──●──●────●────    shared working branch
+          everyone commits here, constantly
+```
+
+**One working branch, no task branches.** Whether the project works on `main` or on
+`dev`, nobody creates a feature branch or a worktree for a task — the work goes on the
+working branch. A repo full of half-merged task branches is the mess this rule exists
+to prevent. In Claude Code the plugin's branch guard enforces this at the command line
+(task branches and worktrees are refused; on a `dev` project anything that touches
+`main` asks first). Other agents follow it by reading this file.
+
 ### When `origin/dev` exists
 
 - **`dev` is the working branch.** Every person and every agent commits there, constantly.

@@ -23,19 +23,34 @@ files and oversized excerpts are explicit. [How startup memory works](plugin/doc
 
 ### 2. Keep shared work on dev
 
-For projects that already have `origin/dev`, the shared protocol requires agents
-to work on `dev` and reserve `main` for deliberate releases. At session start,
-the sync hook fetches and fast-forwards a clean, strictly-behind `dev` checkout.
-Dirty work, divergence, or another branch calls for a decision; the hook preserves
-local work and never switches branches automatically.
+Most projects work directly on `main`, and that is fine. The dev flow is for a
+**live** project: real users, `main` auto-deploys, more than one person committing.
+Nothing activates until the repo has an `origin/dev` branch, and no agent ever
+creates one on its own.
 
-Projects without `origin/dev` keep their existing simple workflow on `main`.
-The plugin never creates `dev` on its own.
+```text
+main   ────────────────●──────────────────────●────   production (auto-deploys)
+                      ↑                      ↑
+                    merge                  merge      ← rare, deliberate
+                      │                      │
+dev    ──●──●──●──●───●──●──●──●──●──●──●────●────    shared working branch
+          everyone commits here, constantly
+```
 
-**Enforcement boundary:** branch discipline is an agent instruction, supported by
-session-start checks. This plugin does not intercept every write or prevent every
-commit on `main`. Use repository branch protection when production needs a hard
-server-side restriction.
+At session start, the sync hook fetches and fast-forwards a clean, strictly-behind
+`dev` checkout. Dirty work, divergence, or another branch calls for a decision; the
+hook preserves local work and never switches branches automatically.
+
+While the agent works, a branch guard enforces the flow at the command line. In any
+project with memory files it refuses task branches and worktrees, the usual source of
+a repo full of stray branches. Where `origin/dev` exists it also refuses commits off
+`dev`, and anything that touches `main` (switching to it, merging into it, pushing it)
+becomes a permission prompt, because that is a release. Refusals go to the model with
+the reason; you only see the release prompts. [What it checks](plugin/docs/BRANCH-GUARD.md).
+
+**Enforcement boundary:** the guard sees git run through the agent's shell tools.
+Other tools, other agents, and your own terminal are not covered. Use repository
+branch protection when production needs a hard server-side restriction.
 
 ### 3. Wrap up with a usable handoff
 
@@ -92,7 +107,7 @@ node tests/run.mjs
 ```
 
 The suite checks memory reminders, wrap-up markers and bloat, safe Git syncing,
-scripted handoffs, harness behavior, and an isolated copy of the plugin payload.
+scripted handoffs, the branch guard, harness behavior, and an isolated copy of the plugin payload.
 See [what is tested and what needs live evaluation](docs/TESTING.md).
 
 ## Optional helpers

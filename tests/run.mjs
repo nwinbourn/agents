@@ -32,7 +32,7 @@ try {
   for (const file of walk(installed).filter(p => p.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', file]);
   console.log('Packaging checks passed; running suites against plugin/ copied in isolation.');
   const env = { ...process.env, AGENTS_HOOKS: join(installed, 'hooks') };
-  for (const suite of ['core.mjs', 'memory-loader.mjs', 'verifier.mjs', 'harness/run.mjs']) {
+  for (const suite of ['core.mjs', 'memory-loader.mjs', 'verifier.mjs', 'branch-guard.mjs', 'harness/run.mjs']) {
     execFileSync(process.execPath, [join(root, 'tests', suite)], { env, stdio: 'inherit', timeout: 180000 });
   }
 } finally {

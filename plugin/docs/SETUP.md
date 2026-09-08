@@ -67,6 +67,12 @@ That's the whole adoption. A recorded `origin/dev` enables sync. STATE or CONTEX
 enables startup memory loading; STATE enables the staleness reminder. Shared dev
 projects also get notices when required memory is missing. Other projects stay silent.
 
+Memory files also turn on the branch guard: Claude cannot create task branches or
+worktrees in the project. With `origin/dev` it also cannot commit off `dev`, and
+anything that touches `main` (switching to it, merging into it, pushing it) asks you
+first, because that is a release. Creating `dev` itself always asks. Details and limits:
+[branch guard](BRANCH-GUARD.md).
+
 ## Optional: the agent harness
 
 Off until you turn it on — no config file needed:
@@ -103,7 +109,8 @@ verification rules there if you maintain an override.
 - **Open a session** → startup has synced `dev` if safe and loaded current project memory; if
   anything needs a decision (dirty tree, diverged branch), Claude tells you before work
   starts. Ask "what's next?" — the answer comes from `STATE.md`.
-- **Work** → normal. Claude keeps `STATE.md` honest as things move.
+- **Work** → normal. Claude keeps `STATE.md` honest as things move, and the branch guard
+  keeps the work on the working branch; the only git prompts you see are release steps.
 - **End the session** → say "wrap up." Memory gets updated and compacted, then `dev`
   is committed and pushed (you approve the push). Your collaborators' next session
   starts from what yours learned.
