@@ -12,7 +12,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveProject } from './lib/project-inspection.mjs';
+import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
+import { MEMORY_FILES, countLines } from './lib/memory-hygiene.mjs';
 import crypto from 'node:crypto';
 
 let raw = '';
@@ -31,9 +32,17 @@ const markerDir = path.join(process.env.USERPROFILE || process.env.HOME || '.', 
 const key = crypto.createHash('sha1').update(projectDir).digest('hex').slice(0, 16);
 const markerPath = path.join(markerDir, `${key}.json`);
 
+// Sizes at the moment wrap-up starts, so the Stop hook can tell whether the trim pass ran.
+const sizes = {};
+for (const name of MEMORY_FILES) {
+  const file = findMemoryFile(projectDir, name);
+  if (!file) continue;
+  try { sizes[name] = countLines(fs.readFileSync(file, 'utf8')); } catch {}
+}
+
 try {
   fs.mkdirSync(markerDir, { recursive: true });
-  fs.writeFileSync(markerPath, JSON.stringify({ projectDir, armedAt: Date.now() }));
+  fs.writeFileSync(markerPath, JSON.stringify({ projectDir, armedAt: Date.now(), sizes }));
 } catch {}
 
 process.exit(0);

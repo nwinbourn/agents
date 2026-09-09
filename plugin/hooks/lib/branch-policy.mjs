@@ -139,7 +139,9 @@ function analyzeGit(sub, args) {
     case 'checkout': return parseCheckout(args);
     case 'switch': return parseSwitch(args);
     case 'branch': return parseBranch(args);
-    case 'worktree': return args[0] === 'add' ? { kind: 'worktree' } : null;
+    case 'worktree':
+      if (args[0] === 'add') return { kind: 'worktree' };
+      return args[0] === 'remove' && has('--force', '-f') ? { kind: 'worktree-remove-force' } : null;
     case 'stash': return args[0] === 'branch' && args[1] ? { kind: 'create', target: args[1] } : null;
     case 'commit': return { kind: 'commit' };
     case 'cherry-pick':
@@ -208,23 +210,27 @@ const BRANCH_LIST_FLAGS = new Set(['--list', '--all', '--remotes', '--verbose', 
 function parseBranch(args) {
   const positional = [];
   let mode = 'create';
+  let force = false;
   for (const a of args) {
     if (a === '--') continue;
     if (!a.startsWith('-')) { positional.push(a); continue; }
     if (a === '--delete') mode = 'delete';
+    else if (a === '--force') force = true;
     else if (a === '--move') mode = 'rename';
     else if (a === '--copy') mode = 'copy';
     else if (BRANCH_LIST_FLAGS.has(a) || /^--(format|sort|column|set-upstream-to|contains|no-contains|merged|no-merged|points-at)=/.test(a)) mode = 'list';
     else if (/^-[a-zA-Z]+$/.test(a)) {
       const letters = a.slice(1);
-      if (/[dD]/.test(letters)) mode = 'delete';
+      if (/D/.test(letters)) { mode = 'delete'; force = true; }
+      else if (/d/.test(letters)) mode = 'delete';
       else if (/[mM]/.test(letters)) mode = 'rename';
       else if (/[cC]/.test(letters)) mode = 'copy';
       else if (/[larv]/.test(letters)) mode = 'list';
+      if (/f/.test(letters)) force = true;
     }
   }
   if (mode === 'list') return null;
-  if (mode === 'delete') return { kind: 'branch-delete', target: positional[0] ?? null };
+  if (mode === 'delete') return { kind: 'branch-delete', target: positional[0] ?? null, force };
   if (mode === 'rename') return { kind: 'branch-rename', target: positional[positional.length - 1] ?? null };
   if (mode === 'copy') return positional.length ? { kind: 'create', target: positional[positional.length - 1] } : null;
   return positional.length ? { kind: 'create', target: positional[0] } : null;
@@ -314,8 +320,12 @@ export function decide(op, state) {
     case 'reset-hard':
       return shared ? ask(`branch-guard: 'git reset --hard' discards work. Needs the user's explicit approval. ${rules}`) : allow();
     case 'branch-delete':
+      if (op.force) return ask(`branch-guard: force-deleting '${op.target ?? 'a branch'}' discards any commits that are not on the working branch. Show the user what it holds and get an explicit yes. ${rules}`);
+      return shared ? ask(`branch-guard: deleting branches needs the user's explicit approval. ${rules}`) : allow();
     case 'branch-rename':
-      return shared ? ask(`branch-guard: ${op.kind === 'branch-delete' ? 'deleting' : 'renaming'} branches needs the user's explicit approval. ${rules}`) : allow();
+      return shared ? ask(`branch-guard: renaming branches needs the user's explicit approval. ${rules}`) : allow();
+    case 'worktree-remove-force':
+      return ask(`branch-guard: removing a worktree with --force discards its uncommitted changes. Needs the user's explicit yes. ${rules}`);
     case 'pr-merge':
       return shared ? ask(`branch-guard: merging a pull request can publish '${state.trunk}'. Approve only for a release the user asked for. ${rules}`) : allow();
     case 'push': {

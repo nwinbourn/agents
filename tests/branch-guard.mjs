@@ -186,6 +186,20 @@ try {
       assert.equal(decision(sh(dir, 'git switch -c feature')), 'deny');
     } finally { rmSync(settings, { force: true }); }
   });
+  await test('force-deleting a branch or force-removing a worktree asks in every mode', () => {
+    const dir = local();
+    assert.equal(sh(dir, 'git branch -d feature'), null);
+    assert.equal(sh(dir, 'git worktree remove ../tree'), null);
+    assert.equal(sh(dir, 'git worktree prune'), null);
+    for (const c of ['git branch -D feature', 'git branch --delete --force feature', 'git branch -df feature', 'git worktree remove --force ../tree', 'git worktree remove -f ../tree']) {
+      assert.equal(decision(sh(dir, c)), 'ask', c);
+    }
+    assert.match(reason(sh(dir, 'git branch -D feature')), /discards any commits/);
+    const team = shared();
+    assert.match(reason(sh(team, 'git branch -D feature')), /discards any commits/);
+    assert.equal(decision(sh(team, 'git worktree remove --force ../tree')), 'ask');
+    assert.equal(sh(team, 'git worktree remove ../tree'), null);
+  });
   await test('malformed events exit silently', () => {
     const dir = shared();
     for (const raw of ['', 'null', '[]', '{', '{"cwd":42}', '{"tool_name":"Bash"}', '{"tool_name":"Bash","tool_input":"git checkout -b x"}', '{"tool_name":"Bash","tool_input":{"command":42}}']) {

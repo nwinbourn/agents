@@ -30,9 +30,9 @@ git status --short && git diff --stat
 Read that alongside the session. Memory alone will miss edits and invent others.
 
 If `CONTEXT.md` / `STATE.md` / `PITFALLS.md` are already in context from the session's
-`@import`, you can skip re-reading for steps 2–5. **Step 6 (compact and cross-check)
-requires reading all three files** even if they're in context — the compaction pass needs
-the full current text, not a stale in-context copy that predates this session's edits.
+CLAUDE.md imports, you can skip re-reading for steps 2–5. **Step 6 (trim) requires reading every
+memory file** even if they're in context — the trim pass needs the full current text, not
+a stale in-context copy that predates this session's edits.
 
 ### 2. Classify every item before writing anything
 
@@ -44,7 +44,7 @@ For each thing that changed or got decided, apply this test:
 |---|---|---|
 | Yes — it's a fact about what the project *is* | `CONTEXT.md` | Stated flatly, present tense, no date |
 | No — it's about what remains | `STATE.md` | A status, or a next action |
-| It's a trap that already cost debugging time **twice** | `PITFALLS.md` | The failure, its tell, and what to do instead |
+| It's a trap that already cost debugging time **twice** | `PITFALLS.md` | A heading, then **Trap:**, **Tell:**, **Fix:** — under 12 lines, no story |
 | It's a visual/brand decision (palette, font, spacing, reference) | `DESIGN.md` (if it exists) | The decision and the why, no dates |
 | It's "on <date> we did X" | **Nowhere.** Delete it | git already has it |
 
@@ -81,9 +81,15 @@ what happened, it has become the changelog again.
 ```
 
 `Do this first` must name the file, route or command. "Continue the redesign" is a failure;
-"open `sandbox/foo.html` and say whether it lands" is not. This is checked mechanically:
-the Stop hook after wrap-up rejects a first step with no path, backticked command, URL
-or commit, and the next session start re-checks the whole handoff.
+"open `sandbox/foo.html` and say whether it lands" is not. A field may run onto the lines
+under its label (a short list is fine), but the block is **the three fields and nothing
+else**: no banners, no commands, no "things a cold session must know". A standing warning
+is a constraint and lives in `CONTEXT.md`; a trap lives in `PITFALLS.md`; a task list
+lives in the body of this file. Keep the whole block under 25 lines.
+
+This is checked mechanically: the Stop hook after wrap-up rejects a first step with no
+path, backticked command, URL or commit, stops once when the block carries extra content
+or runs long, and the next session start re-checks the whole handoff.
 
 ### 4b. If workers ran this session, land their state
 
@@ -99,6 +105,10 @@ to lose between sessions. Before moving on:
 - **Nothing about the workers themselves.** No agent ids, no token counts, no "spawned 6
   workers" — that's what happened, not where things stand. Record only the state of the
   work.
+- **A branch or worktree other than the working branch is unintegrated work.** Session
+  start lists them; any with commits not on the working branch must be named here (what
+  it holds, who decides) until it is merged or deleted, or the verifier's `branches`
+  check stays incomplete. Merged leftovers are clutter: say "clean up the branches".
 
 ### 5. Save durable preferences to memory
 
@@ -107,59 +117,45 @@ directory and index it. Preferences belong in memory; project status belongs in 
 Never put project state in global memory — projects are at different stages and it will be
 wrong everywhere else.
 
-### 6. Compact and cross-check all three files
+### 6. Trim every file, every time
 
-The goal: the next session loads these files and gets **accurate, lean context** — no
-bloat to wade through, no contradictions to stumble over, no stale info to act on wrongly.
-A cold session trusts these files completely — and on shared projects the next session may
-be a different person's. Wrong or bloated docs waste the humans' time re-explaining things
-and cause agents to get lost.
+This is the step that gets skipped, and the reason the files bloat: at the end of a long
+session the context is full and cutting feels risky. So it is not optional, and it is
+checked. **Every wrap-up removes as well as adds.** A file over its guidance size that
+leaves wrap-up no shorter than it entered stops the agent once, with the sizes; you then
+trim it or say in one line why the size is needed. That is not a cap. It is the trim pass
+being checked.
 
-**Read all project memory files** (STATE.md, CONTEXT.md, PITFALLS.md, DESIGN.md — whichever
-exist) and apply these passes:
+A cold session trusts these files completely, and on shared projects the next session may
+be a different person's. **Read every memory file that exists** and cut, file by file:
 
-#### Pass 1: Trim
+| File | Guidance | What to cut |
+|---|---|---|
+| `STATE.md` | 400 lines | Resolved items; ✅ phases with nothing left (collapse to one line); verdict transcripts and "what happened" narrative; ideas nobody decided (one line under Open questions, or delete); warnings that belong in CONTEXT or PITFALLS |
+| `CONTEXT.md` | 300 lines | Implementation detail the code already says; exact paths that can be grepped; explanations that can be a sentence; anything with a date |
+| `PITFALLS.md` | 300 lines, entries under 12 | War stories; entries whose trap no longer exists; anything that bit once. Every entry is a heading, then **Trap:**, **Tell:**, **Fix:**, nothing else |
+| `DESIGN.md` | 300 lines | Reversed or superseded choices; the history of how the look got there; claims that no longer match the code (flag those rather than silently trusting them) |
 
-For each line or block in every file, ask: **does a cold session need this to do its job?**
+**Fresh eyes when a file is over guidance.** Hand the trim pass for that file to a
+subagent with a clean context: give it the file, the row above and one rule, that it
+proposes deletions and does not write. Apply the cuts you agree with; show the user the
+ones you are unsure about. One extra model call is cheaper than every future session
+starting 50K tokens deep.
 
-- **STATE.md** — delete resolved items, completed phases that have no remaining sub-work,
-  narrative about how something was built, anything that reads as "what happened" rather
-  than "what's left." If a phase is ✅ done with nothing pending under it, collapse it to
-  one line with the status.
-- **CONTEXT.md** — delete detail that duplicates what the code already says (exact file
-  paths that could be grepped, implementation specifics that live in the source). Keep
-  decisions, constraints, brand facts, and anything a session couldn't derive by reading
-  the codebase. Tighten wordy explanations — if a paragraph can be a sentence, make it one.
-- **PITFALLS.md** — delete entries for traps that no longer apply (the code was
-  restructured, the dependency was removed, the pattern was eliminated). Keep anything
-  that could still bite. Tighten verbose entries to: the trap, its tell, the fix.
-- **DESIGN.md** (if it exists) — delete entries for design choices that were reversed
-  or superseded. Keep the current visual identity, not the history of how it got there.
-  Verify key claims (palette, fonts, spacing) still match the codebase — flag anything
-  that's drifted rather than silently trusting it.
+Then, across all files:
 
-#### Pass 2: Deduplicate
+- **Deduplicate.** A fact in two files gets one home (the test in step 2) and a pointer
+  from the other. Two copies drift; one will be wrong eventually.
+- **Contradictions.** Compare claims across files and against the code. Present both
+  versions to the user with the file each is in, and let them decide. Never silently pick.
+- **The cold-open test.** Someone opens a session tomorrow and asks "what do we need to
+  do?" Does `STATE.md` alone answer correctly? If not, it isn't finished.
+- **The changelog check.** Lines starting with a date, or containing "we added / fixed /
+  changed / did", are log lines. Rewrite as status or delete. The Stop hook flags what its
+  patterns catch; the patterns do not catch everything.
 
-If the same fact appears in more than one file, keep it in the one it belongs to (use the
-classification test from step 2) and delete it from the others. Two copies will drift —
-one will be wrong eventually.
-
-#### Pass 3: Contradictions
-
-Compare claims across files and against the current code. For each contradiction found:
-- **Stop and ask the user** — present both versions, say which file each is in, and ask
-  them to decide, verify, or clarify. Do not silently pick one.
-- Wait for their answer before writing the fix.
-
-#### Pass 4: Verify
-
-- **The cold-open test:** if someone opens a session tomorrow and asks "what do we need to
-  do?", does `STATE.md` alone answer correctly? If not, it isn't finished.
-- **The changelog check:** scan for lines starting with a date, or containing "we
-  added/fixed/changed/did". Every one is a log line. Rewrite as status, or delete.
-- **The size check:** `STATE.md` over 400 lines is almost always bloated — look harder.
-  `CONTEXT.md` over 300 lines means detail is creeping in that belongs in the code, not
-  the docs. These aren't hard limits, but they're where to push back.
+Finish with the **trim line** you will report in the chat: lines out of each file, and for
+any file at zero, why.
 
 ### 7. Sync the shared branch
 
@@ -228,7 +224,8 @@ Details and check boundaries: `docs/WRAP-UP-VERIFIER.md` in the plugin.
 
 It hasn't adopted the protocol. Offer to create the three files in the standard shape
 before doing anything else — `CONTEXT.md` (the WHAT), `STATE.md` (the progress tracker),
-`PITFALLS.md` (the repeating traps), loaded via `@import` from the project loader. The
+`PITFALLS.md` (the repeating traps), loaded with bare `@path` lines from the project's
+`CLAUDE.md` (`@import path` loads nothing). The
 plugin's `templates/` directory has skeletons for all of them.
 
 If it has them in the **old shape** — a `Done ✅` log inside `STATE.md`, or a separate
@@ -242,6 +239,7 @@ Close with, briefly:
 
 - **Where to pick up** — repeat the `Do this first` line.
 - **What moved** — statuses that changed, in one line.
+- **What you trimmed** — lines out of each memory file; for a file at zero, why.
 - **Sync state** — on shared projects: "dev is committed and pushed" or exactly what isn't
   and why.
 - **What's waiting on them** — decisions only they can make.

@@ -54,6 +54,30 @@ agent must relay to the user before starting work. It comes from git, not from t
 prose in STATE.md, so a confident Start here block cannot hide uncommitted or
 unpushed work.
 
+## Memory size
+
+Startup adds one `[memory-size]` line: the line count of each memory file, the total in
+KB with a rough token figure (bytes divided by four), and which files are over guidance
+(STATE 400 lines, CONTEXT 300, PITFALLS 300, DESIGN 300). Guidance is not a cap. The
+check after wrap-up uses the same numbers: a file over guidance has to leave wrap-up
+shorter than it entered, or the agent says why not. The agent is told to mention the line
+only when asked.
+
+Files that the project's CLAUDE.md already imports with `@path` are not loaded a second
+time; the loader names them as already in context. Imports are followed five hops deep,
+so a CLAUDE.md that imports AGENTS.md which imports STATE.md counts. `@import path` is
+not Claude Code's syntax and loads nothing, so the loader does not treat it as an import.
+
+## Leftover branches
+
+On a Git project, startup also adds a `[branches]` line when anything exists besides the
+working branch and main: local branches (merged, or how many commits are not on the
+working branch, and whether STATE.md names it), leftover worktrees (clean or dirty,
+merged or not), and remote branches other than main and dev. It repeats every session
+until the repository is down to its working branch. "Clean up the branches" resolves
+them, and nothing is deleted without the user's yes. The inventory is read-only; the same
+code backs the verifier's `branches` check and the `branch-inventory.mjs` command.
+
 Memory selection and injection do not prove that the agent understands the files,
 that they are accurate, or that no concurrent writer changes them afterward. The
 wrap-up verifier and live evaluation scenarios cover the other end of the workflow.

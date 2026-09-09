@@ -155,6 +155,19 @@ try {
     const dir=local();write(dir,'STATE.md',state+'\n> ALL WORK HAPPENS ON dev\n\n```bash\nnpm run dev\n```\n\nAlso: delete .next/ after a crash.\n\n## Phases\n');save(dir);
     const r=verify(dir);assert.equal(r.status,'passed');const h=check(r,'handoff');assert.equal(h.extraLines,3);assert.equal(h.lines,6);
   });
+  test('a stray branch with unrecorded commits is incomplete until STATE.md names it',()=>{
+    const dir=local();git(dir,'switch','-c','feature');write(dir,'app.txt','feature work\n');save(dir);git(dir,'switch','main');git(dir,'branch','old');
+    let r=verify(dir);const b=check(r,'branches');assert.equal(b.status,'incomplete');assert.match(b.message,/'feature' has 1 commit not on main/);assert.deepEqual(b.leftovers,['old']);
+    write(dir,'STATE.md',state.replace('**Mid-flight:** nothing','**Mid-flight:** branch `feature` holds the retry work, unmerged; the user decides'));save(dir);
+    r=verify(dir);assert.equal(r.status,'passed');assert.match(check(r,'branches').message,/safe to delete: old/);
+    git(dir,'branch','-d','old');git(dir,'branch','-D','feature');assert.equal(check(verify(dir),'branches').leftovers.length,0);
+  });
+  test('a worktree with commits not on the working branch is unrecorded work',()=>{
+    const dir=local();const tree=join(base,'tree-'+passed);git(dir,'worktree','add','--detach',tree);
+    assert.equal(check(verify(dir),'branches').status,'passed');
+    write(tree,'app.txt','worktree work\n');git(tree,'add','.');git(tree,'commit','-m','In the worktree');
+    const r=verify(dir);assert.equal(check(r,'branches').status,'incomplete');assert.match(check(r,'branches').message,/worktree at .* has 1 commit not on main/);
+  });
   console.log(`${passed} wrap-up verifier checks passed`);
 } finally {
   // The only deletion target is this run's freshly allocated absolute temp root.

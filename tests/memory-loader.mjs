@@ -120,6 +120,23 @@ try {
     const {client}=shared();write(client,'app.txt','local commit');git(client,'add','.');git(client,'commit','-m','Unpushed');
     assert.match(load(client),/dev does not match origin/);
   });
+  test('startup reports memory size and what is over guidance',()=>{
+    const dir=local();let output=load(dir);assert.match(output,/\[memory-size\] STATE.md 7 lines, CONTEXT.md 1 line: 1 KB, under 1K tokens when all of it loads\. All within guidance\./);
+    write(dir,'CONTEXT.md','fact\n'.repeat(350));output=load(dir);assert.match(output,/Over guidance: CONTEXT.md 350\/300/);
+  });
+  test('files CLAUDE.md already imports are not loaded twice',()=>{
+    const dir=local();write(dir,'AGENTS.md','# Rules\n\n@STATE.md\n');write(dir,'CLAUDE.md','# Project\n\n@AGENTS.md\n');
+    const output=load(dir);assert(!output.includes('**Do this first:** inspect app.txt'));assert.match(output,/STATE.md \| [^\n]*\nAlready in context through a CLAUDE.md import/);assert(output.includes('project-context-marker'));
+    write(dir,'CLAUDE.md','# Project\n\n@import STATE.md\n');rmSync(join(dir,'AGENTS.md'));assert(load(dir).includes('**Do this first:** inspect app.txt'));
+  });
+  test('startup lists leftover branches until the repository is down to its working branch',()=>{
+    const dir=local();assert(!load(dir).includes('[branches]'));
+    git(dir,'branch','old');git(dir,'switch','-c','feature');write(dir,'app.txt','feature');save(dir);git(dir,'switch','main');
+    const output=load(dir);
+    assert.match(output,/\[branches\] 2 local branches besides main: feature \(1 commit not on main, not named in STATE.md, last commit \d{4}-\d{2}-\d{2}\); old \(merged, safe to delete, last commit \d{4}-\d{2}-\d{2}\)\. This project keeps one working branch \(main\)/);
+    assert.match(output,/\[handoff\] The previous handoff is incomplete: a stray branch or worktree/);
+    git(dir,'branch','-d','old');git(dir,'branch','-D','feature');assert(!load(dir).includes('[branches]'));
+  });
   console.log(`${passed} startup memory checks passed`);
 } finally {
   // Only remove this run's newly allocated absolute temporary directory.

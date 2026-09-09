@@ -1,6 +1,6 @@
 # agents (this repo)
 
-@import plugin/templates/AGENTS.md
+@plugin/templates/AGENTS.md
 
 Local `CONTEXT.md` / `STATE.md` are the maintainer's private tracking — untracked and
 gitignored, never published. Read them if they exist on this machine.

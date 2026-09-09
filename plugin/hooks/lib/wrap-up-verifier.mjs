@@ -1,6 +1,7 @@
 // Independent implementation of this repository's handoff requirements.
 // Read-only Git queries; no fetch, index refresh, checkout, commit or push.
 import { inspectProject, findMemoryFile, runGit as git } from './project-inspection.mjs';
+import { branchInventory } from './branch-inventory.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -76,7 +77,7 @@ export function verifyWrapUp({ project = process.cwd(), checkRemote = false, rem
   const root = projectInfo.root;
   const scope = projectInfo.workflow;
   if (!projectInfo.isGit) {
-    for (const id of ['branch', 'conflicts', 'commits', 'worktree', 'remote']) {
+    for (const id of ['branch', 'conflicts', 'commits', 'worktree', 'branches', 'remote']) {
       checks.push(result(id, 'unknown', 'A Git working tree could not be inspected.'));
     }
   } else {
@@ -102,6 +103,21 @@ export function verifyWrapUp({ project = process.cwd(), checkRemote = false, rem
       result('worktree', dirty.output ? 'incomplete' : 'passed', dirty.output ?
         'Uncommitted or untracked work remains. Review its ownership; do not commit unrelated files to make this pass.' :
         'No staged, unstaged or untracked changes. Ignored files are outside this check.'));
+
+    // A branch or worktree with commits not on the working branch is unintegrated work;
+    // STATE.md has to name it. Merged leftovers are clutter, reported but not failing.
+    const inventory = branchInventory(root, scope);
+    const commits = n => `${n} commit${n === 1 ? '' : 's'} not on ${inventory.working}`;
+    const unrecorded = [
+      ...inventory.local.filter(b => b.ahead > 0 && !b.named).map(b => `'${b.name}' has ${commits(b.ahead)}`),
+      ...inventory.worktrees.filter(w => w.ahead > 0 && !w.named).map(w => `the worktree at ${w.path} has ${commits(w.ahead)}`),
+    ];
+    const leftovers = [...inventory.local.filter(b => b.merged && !b.current).map(b => b.name), ...inventory.worktrees.filter(w => w.merged).map(w => w.path)];
+    checks.push(unrecorded.length
+      ? result('branches', 'incomplete', `${unrecorded.slice(0, 3).join('; ')}${unrecorded.length > 3 ? `; and ${unrecorded.length - 3} more` : ''}, and STATE.md does not name ${unrecorded.length === 1 ? 'it' : 'them'}. Record it under Mid-flight, merge it, or delete it.`,
+        { working: inventory.working, unrecorded, leftovers })
+      : result('branches', 'passed', `No branch or worktree carries unrecorded work.${leftovers.length ? ` Merged leftovers safe to delete: ${leftovers.join(', ')}.` : ''}`,
+        { working: inventory.working, leftovers }));
 
     if (scope === 'local') {
       checks.push(result('remote', 'passed', 'Sharing is not required by the local workflow; nothing about publication was verified.', { required: false }));

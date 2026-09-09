@@ -48,6 +48,11 @@ a repo full of stray branches. Where `origin/dev` exists it also refuses commits
 becomes a permission prompt, because that is a release. Refusals go to the model with
 the reason; you only see the release prompts. [What it checks](plugin/docs/BRANCH-GUARD.md).
 
+Leftovers from before the guard, or from other tools, are listed at every session start
+with whether they are merged and whether STATE.md knows about them. Say "clean up the
+branches" and the agent walks through them: merged ones deleted after your yes, unmerged
+ones shown so you pick merge, keep or delete. Nothing is deleted on its own.
+
 **Enforcement boundary:** the guard sees git run through the agent's shell tools.
 Other tools, other agents, and your own terminal are not covered. Use repository
 branch protection when production needs a hard server-side restriction.
@@ -73,12 +78,18 @@ See [verifier usage](plugin/docs/WRAP-UP-VERIFIER.md).
 The checks run whether or not the agent remembers to run them:
 
 - **When wrap-up ends**, a hook checks that STATE.md has a real Start here block
-  (three fields, and a first step that names a file, route or command, so "continue
-  the redesign" is rejected), and flags changelog creep: dated lines, "we added" and
-  "we fixed" narration, log sections, and facts copied word-for-word from CONTEXT.md.
+  (three fields and nothing else, with a first step that names a file, route or
+  command, so "continue the redesign" is rejected), flags changelog creep (dated lines,
+  "we added" and "we fixed" narration, log sections, facts copied word-for-word from
+  CONTEXT.md), and checks that the trim pass happened: a memory file over its guidance
+  size that left wrap-up no shorter than it entered stops the agent once, and PITFALLS
+  entries without the Trap / Tell / Fix shape get named. Not a cap: the agent trims, or
+  says why the size is needed.
 - **At the next session start**, the verifier runs again against the synced checkout
   and the agent opens with one line: the previous handoff passed, or it left
-  uncommitted work, an unfinished merge, unpushed commits, or no usable Start here block.
+  uncommitted work, an unfinished merge, unpushed commits, a stray branch with
+  unrecorded commits, or no usable Start here block. Two more lines list leftover
+  branches and worktrees, and the size of the memory files with what is over guidance.
 - **On every turn**, a stop hook notices when project files changed but STATE.md did not.
 
 These checks are mechanical: they prove the handoff's shape and the repository's
@@ -128,6 +139,9 @@ and the loop does not depend on them. They are off, or inert, until you use them
 - [Harness](plugin/skills/harness/SKILL.md), experimental: reusable background workers,
   model routing, ownership and verification rules, with best-effort burst checks.
   Off until `/harness on`.
+- [Clean branches](plugin/skills/clean-branches/SKILL.md): the "clean up the branches"
+  walk-through. Part of the loop's housekeeping rather than an extra, but it only runs
+  when you ask.
 - [Voice](plugin/skills/voice/SKILL.md): switchable output styles.
 - [Occam](plugin/skills/occam/SKILL.md): an over-engineering check; its optional hook
   ships unwired.

@@ -26,6 +26,15 @@ but must follow the rules below.
 | A trap that cost real debugging time | `PITFALLS.md` | The trap, its tell, the fix |
 | "On [date] we did X" | **Nowhere** | Git has it |
 
+### What does not belong
+
+| File | Not here |
+|---|---|
+| `CONTEXT.md` | Implementation detail the code already says, paths that can be grepped, anything with a date |
+| `STATE.md` | What happened, verdict transcripts, undecided ideas beyond one line each, warnings that are really constraints (CONTEXT) or traps (PITFALLS) |
+| `PITFALLS.md` | War stories, one-time mistakes, anything that has not bitten twice |
+| `DESIGN.md` | The history of how the look got there, reversed choices |
+
 ### Rules for writing to memory files
 
 - **No changelogs.** `STATE.md` tracks where things STAND, not what happened. No dated
@@ -41,6 +50,15 @@ but must follow the rules below.
   — it's now part of what the project is, not work in progress.
 - **Delete what's stale.** An outdated entry is worse than a missing one because it gets
   trusted. If something is no longer true, remove it.
+- **Every wrap-up removes as well as adds.** Guidance sizes: `STATE.md` 400 lines,
+  `CONTEXT.md` 300, `PITFALLS.md` 300, `DESIGN.md` 300. Over that, a wrap-up leaves the
+  file shorter than it found it, or says why not. Size is never the goal; files worth
+  reading are. Session start reports the sizes; the check after wrap-up enforces the habit.
+- **Start here is three fields and nothing else.** `Do this first`, `Waiting on you`,
+  `Mid-flight`, under 25 lines together. Banners and commands go to `CONTEXT.md`, traps
+  to `PITFALLS.md`, tasks into the body.
+- **A pitfall is a heading plus Trap, Tell, Fix.** Under 12 lines, no story. If it can't
+  be said that briefly, it isn't understood yet.
 - **Explicit statuses.** Use `✅ done` / `🔶 in progress` / `⬜ not started` — not bare
   checkboxes. A naked checklist reads as all-to-do and hides what's finished.
 - **Separate decided work from ideas.** Mixing them makes the list look longer and less
@@ -74,6 +92,12 @@ working branch. A repo full of half-merged task branches is the mess this rule e
 to prevent. In Claude Code the plugin's branch guard enforces this at the command line
 (task branches and worktrees are refused; on a `dev` project anything that touches
 `main` asks first). Other agents follow it by reading this file.
+
+**Leftovers get resolved, not ignored.** A branch or worktree other than the working
+branch is unintegrated work: it is named in `STATE.md` under Mid-flight until it is
+merged or deleted, and the wrap-up verifier stays incomplete while it is not. Merged
+leftovers are clutter. Session start lists both; "clean up the branches" walks through
+them, and nothing is deleted without the user's yes.
 
 ### When `origin/dev` exists
 

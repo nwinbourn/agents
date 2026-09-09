@@ -1,5 +1,7 @@
-import { openSync, readSync, closeSync, fstatSync } from 'node:fs';
+import { openSync, readSync, closeSync, fstatSync, readFileSync, existsSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { inspectProject } from './project-inspection.mjs';
 
 export const FILE_LIMIT_BYTES = 12 * 1024;
@@ -24,9 +26,41 @@ function readBounded(path, limit) {
   }
 }
 
+/**
+ * Files the project's CLAUDE.md already pulls into context through `@path` imports,
+ * followed up to five hops deep (Claude Code's own limit). Loading them again here
+ * would cost the same tokens twice.
+ */
+export function importedByLoader(root) {
+  const imported = new Set();
+  const seen = new Set();
+  const visit = (file, depth) => {
+    if (depth > 5 || seen.has(file)) return;
+    seen.add(file);
+    let text;
+    try { text = readFileSync(file, 'utf8'); } catch { return; }
+    let fence = false;
+    for (const line of text.split(/\r?\n/)) {
+      if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) { fence = !fence; continue; }
+      if (fence) continue;
+      for (const match of line.matchAll(/(?:^|\s)@([^\s@`'"()<>[\]]+)/g)) {
+        const target = match[1].startsWith('~/') ? resolve(join(homedir(), match[1].slice(2))) : resolve(dirname(file), match[1]);
+        imported.add(target);
+        if (/\.md$/i.test(target) && existsSync(target)) visit(target, depth + 1);
+      }
+    }
+  };
+  for (const name of ['CLAUDE.md', 'CLAUDE.local.md', join('.claude', 'CLAUDE.md')]) {
+    const file = join(root, name);
+    if (existsSync(file)) visit(file, 0);
+  }
+  return imported;
+}
+
 export function loadProjectMemory(cwd) {
   const project = inspectProject(cwd);
   if (!project.adopted) return '';
+  const imported = importedByLoader(project.root);
   const lines = [
     `[project-memory] Project root: ${project.root}`,
     `Workflow: ${project.workflow}. These are current files from this checkout, read after the startup sync attempt.`,
@@ -40,6 +74,7 @@ export function loadProjectMemory(cwd) {
       continue;
     }
     lines.push(`\n--- ${name}.md | ${path} ---`);
+    if (imported.has(resolve(path))) { lines.push('Already in context through a CLAUDE.md import; not repeated here.'); continue; }
     if (!remaining) { lines.push('Not loaded: startup memory budget reached. Read this file before relying on it.'); continue; }
     try {
       const part = readBounded(path, Math.min(remaining, FILE_LIMIT_BYTES));

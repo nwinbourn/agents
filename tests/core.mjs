@@ -115,6 +115,25 @@ try {
     write(dir, 'STATE.md', 'open item\n'.repeat(520));
     arm(dir); assert.equal(bloat(dir).decision, 'block');
   });
+  check('wrap-up: an over-guidance file that did not get shorter is flagged once, a trimmed one passes', () => {
+    const dir = folder(); write(dir, 'STATE.md', handoff); write(dir, 'CONTEXT.md', 'fact\n'.repeat(320));
+    arm(dir); const r = bloat(dir); assert.equal(r.decision, 'block');
+    assert.match(r.reason, /CONTEXT.md is 320 lines against a guidance of 300 and did not get shorter during this wrap-up \(320 when it started\)/);
+    assert(!/STATE.md is \d+ lines/.test(r.reason)); assert.equal(bloat(dir), null);
+    arm(dir); write(dir, 'CONTEXT.md', 'fact\n'.repeat(310)); assert.equal(bloat(dir), null);
+    arm(dir); write(dir, 'CONTEXT.md', 'fact\n'.repeat(330)); assert.match(bloat(dir).reason, /330 lines against a guidance of 300/);
+  });
+  check('wrap-up: PITFALLS entries need the Trap, Tell, Fix shape', () => {
+    const dir = folder(); write(dir, 'STATE.md', handoff);
+    write(dir, 'PITFALLS.md', '# Pitfalls\n\n## The dev page looks broken after a hot reload\n\nA long story about what happened.\nIt kept going.\n');
+    arm(dir); const r = bloat(dir); assert.equal(r.decision, 'block'); assert.match(r.reason, /PITFALLS.md: 1 of 1 entries/); assert.match(r.reason, /The dev page looks broken/);
+    write(dir, 'PITFALLS.md', '# Pitfalls\n\n## Group\n\n### The dev page looks broken after a hot reload\n\n**Trap:** stale closures.\n**Tell:** a control that did nothing.\n**Fix:** reload before diagnosing.\n');
+    arm(dir); assert.equal(bloat(dir), null);
+  });
+  check('wrap-up: Start here holds the three fields and nothing else', () => {
+    const dir = folder(); write(dir, 'STATE.md', handoff + '\n> ALL WORK HAPPENS ON dev\n\n```bash\nnpm run dev\n```\n');
+    arm(dir); const r = bloat(dir); assert.equal(r.decision, 'block'); assert.match(r.reason, /holds 2 lines beyond the three fields/); assert.equal(bloat(dir), null);
+  });
   check('wrap-up: expired markers are consumed without prompting', () => {
     const dir = folder(); write(dir, 'STATE.md', 'line\n'.repeat(710)); arm(dir);
     const markerDir = join(userHome, '.claude/hooks/.wrapup-armed');

@@ -1,28 +1,30 @@
 #!/usr/bin/env node
-// Stop hook: after the `wrap-up` skill has run (armed by wrap-up-arm.mjs's
-// PostToolUse hook), checks STATE.md for the three ways a handoff goes bad:
-//   1. bloat — the file grew past the point where it stays legible
-//   2. no usable "Start here" block — missing fields, placeholders, or a first
-//      step that names nothing concrete
-//   3. changelog creep — dated entries, "we added/fixed" narration, log sections,
-//      or facts duplicated word-for-word from CONTEXT.md
-// Staleness is state-reminder.mjs's job on every Stop, independent of wrap-up.
+// Stop hook: after the `wrap-up` skill has run (armed by wrap-up-arm.mjs's PostToolUse
+// hook), checks the memory files for the ways a handoff goes bad:
+//   1. no usable "Start here" block, or a block that holds more than its three fields
+//   2. a file over its guidance size that wrap-up left no shorter than it found it
+//   3. PITFALLS entries without the Trap / Tell / Fix shape, or running long
+//   4. changelog creep in STATE.md: dated entries, "we added/fixed" narration, log
+//      sections, or facts duplicated word-for-word from CONTEXT.md
+// None of these is a size cap. Each stops the agent once with the facts; the agent
+// then fixes the file or says in one line why not. Staleness is state-reminder.mjs's
+// job on every Stop, independent of wrap-up.
 //
-// Fires only once per wrap-up invocation: the marker is consumed (deleted) the
-// moment it's read, whether or not anything is found, and stale markers older
-// than MAX_MARKER_AGE_MS are ignored (still consumed) rather than firing late
-// against an unrelated Stop event.
+// Fires only once per wrap-up invocation: the marker is consumed (deleted) the moment
+// it's read, whether or not anything is found, and stale markers older than
+// MAX_MARKER_AGE_MS are ignored (still consumed) rather than firing late against an
+// unrelated Stop event.
 //
-// Safe globally: no STATE.md, no marker, or git unavailable all degrade to a
-// silent exit — this does nothing in general chats or projects that haven't
-// adopted the protocol, same as state-reminder.mjs.
+// Safe globally: no STATE.md, no marker, or git unavailable all degrade to a silent
+// exit — this does nothing in general chats or projects that haven't adopted the
+// protocol, same as state-reminder.mjs.
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
 import { checkHandoff } from './lib/wrap-up-verifier.mjs';
-import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { GUIDANCE, START_HERE_LINES, PITFALL_ENTRY_LINES, MEMORY_FILES, countLines, pitfallShape } from './lib/memory-hygiene.mjs';
 
 let raw = '';
 try { raw = fs.readFileSync(0, 'utf8'); } catch {}
@@ -43,63 +45,76 @@ let marker;
 try { marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')); } catch { process.exit(0); } // not armed => wrap-up didn't just run here
 try { fs.unlinkSync(markerPath); } catch {} // consume unconditionally — fires at most once per wrap-up call
 
-const MAX_MARKER_AGE_MS = 30 * 60 * 1000; // 30 min — generous for a long wrap-up, short enough not to misfire on a much-later unrelated Stop
+const MAX_MARKER_AGE_MS = 30 * 60 * 1000; // generous for a long wrap-up, short enough not to misfire on a much-later unrelated Stop
 if (!marker || !marker.armedAt || Date.now() - marker.armedAt > MAX_MARKER_AGE_MS) process.exit(0);
 
-// Find STATE.md (project root or docs/). No STATE.md => protocol not adopted => stay silent.
-const statePath = findMemoryFile(projectDir, 'STATE');
-if (!statePath) process.exit(0);
-
-let stateText;
-try { stateText = fs.readFileSync(statePath, 'utf8'); } catch { process.exit(0); }
-const currentLines = stateText.split('\n').length;
+// No STATE.md => protocol not adopted => stay silent.
+if (!findMemoryFile(projectDir, 'STATE')) process.exit(0);
+const texts = {};
+for (const name of MEMORY_FILES) {
+  const file = findMemoryFile(projectDir, name);
+  if (!file) continue;
+  try { texts[name] = fs.readFileSync(file, 'utf8'); } catch {}
+}
+if (texts.STATE == null) process.exit(0);
 
 const reasons = [];
 
-// ---- 1. Bloat -------------------------------------------------------------
-// Growth since the last commit, if this is a git repo with a prior committed
-// version of the file. Unavailable (no git, uncommitted file, detached tree)
-// just drops the growth check — the absolute ceiling below still applies.
-let committedLines = null;
-try {
-  const relPath = path.relative(projectDir, statePath).split(path.sep).join('/');
-  const out = execFileSync('git', ['show', `HEAD:${relPath}`], { cwd: projectDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  committedLines = out.split('\n').length;
-} catch {}
-
-const HARD_LINE_CEILING = 700; // nag regardless of history once STATE.md is this big on its own
-const GROWTH_FLOOR = 500;      // below this absolute size, growth alone never nags — small/young projects are fine
-const GROWTH_CEILING = 150;    // nag if it grew more than this many lines in one sitting, past the floor
-
-const growth = committedLines != null ? currentLines - committedLines : null;
-if (currentLines > HARD_LINE_CEILING || (growth != null && currentLines > GROWTH_FLOOR && growth > GROWTH_CEILING)) {
-  const growthNote = growth != null ? `, +${growth} lines since the last commit` : '';
-  reasons.push([
-    `STATE.md just got a wrap-up update and is now ${currentLines} lines${growthNote} — past the point where this project's`,
-    'progress tracker usually stays legible. That size is almost always changelog entries, resolved narrative, or detail',
-    'duplicated with CONTEXT.md/PITFALLS.md creeping back in, not genuinely new open work.',
-    'Before this turn ends, re-read STATE.md and compact it: for each paragraph, ask "would this still be true in three',
-    'months if nobody did anything?" A settled fact graduates to CONTEXT.md; a trap that has bitten twice graduates to',
-    'PITFALLS.md; dated narrative, resolved items, or anything already recorded elsewhere gets deleted outright — git',
-    'already keeps that history. Keep every genuinely open item, and everything named in "Start here" needs a home in',
-    'the body somewhere. The test: does the file still answer "what do we need to do?" correctly, in as few words as',
-    'that requires? If you have already checked and there is nothing left to compact — every line is a live, undecided',
-    'item — say so in one line and stop.',
-  ].join(' '));
-}
-
-// ---- 2. The Start here block ---------------------------------------------
+// ---- 1. The Start here block ---------------------------------------------
 const handoff = checkHandoff(projectDir);
 if (handoff.status !== 'passed') {
   reasons.push([
     `STATE.md's Start here block is not a usable handoff yet (${handoff.message}).`,
-    'Before this session ends it needs exactly three lines: "Do this first" naming a file, route or command;',
+    'Before this session ends it needs the three fields: "Do this first" naming a file, route or command;',
     '"Waiting on you"; "Mid-flight" (or "nothing" for the last two).',
     'If wrap-up is still in progress and you have not reached that step, keep going and write it.',
   ].join(' '));
+} else {
+  const notes = [];
+  if (handoff.extraLines > 0) notes.push(`holds ${handoff.extraLines} line${handoff.extraLines === 1 ? '' : 's'} beyond the three fields (banners, code or notes)`);
+  if (handoff.lines > START_HERE_LINES) notes.push(`runs ${handoff.lines} lines against a guidance of ${START_HERE_LINES}`);
+  if (notes.length) {
+    reasons.push([
+      `STATE.md's Start here block ${notes.join(' and ')}. The block is the three fields and nothing else:`,
+      'move standing warnings to CONTEXT.md, traps to PITFALLS.md and tasks into the body of STATE.md.',
+      'If the fields genuinely need this much, say why in one line and stop.',
+    ].join(' '));
+  }
 }
 
-// ---- 3. Changelog creep ---------------------------------------------------
+// ---- 2. Trim: a file over guidance must leave wrap-up shorter than it entered --------
+const before = marker.sizes && typeof marker.sizes === 'object' ? marker.sizes : {};
+const stuck = [];
+for (const name of MEMORY_FILES) {
+  if (texts[name] == null) continue;
+  const now = countLines(texts[name]);
+  const start = Number.isFinite(before[name]) ? before[name] : null;
+  if (now <= GUIDANCE[name] || (start != null && now < start)) continue;
+  stuck.push(`${name}.md is ${now} lines against a guidance of ${GUIDANCE[name]}` +
+    (start != null ? ` and did not get shorter during this wrap-up (${start} when it started)` : ''));
+}
+if (stuck.length) {
+  reasons.push([
+    `${stuck.join('; ')}.`,
+    "Every wrap-up trims: cut what the skill's trim pass names (settled decisions, detail the code already says,",
+    'resolved items, traps that no longer bite) before this session ends, or say in one line why the size is',
+    'needed and stop. This is not a cap; it is the trim pass being checked.',
+  ].join(' '));
+}
+
+// ---- 3. PITFALLS entries: a heading, then Trap, Tell, Fix ------------------------
+if (texts.PITFALLS != null) {
+  const shape = pitfallShape(texts.PITFALLS);
+  if (shape.off.length) {
+    reasons.push([
+      `PITFALLS.md: ${shape.off.length} of ${shape.entries} entries are missing the Trap / Tell / Fix labels or run past`,
+      `${PITFALL_ENTRY_LINES} lines (first: "${shape.off[0].heading}"). Each entry is a heading plus **Trap:**, **Tell:** and`,
+      '**Fix:**, nothing else; rewrite those, or drop the ones that no longer bite.',
+    ].join(' '));
+  }
+}
+
+// ---- 4. Changelog creep ---------------------------------------------------
 function smells(state, context) {
   const found = [];
   const blank = m => m.replace(/[^\n]/g, ''); // drop comments but keep line numbers
@@ -121,10 +136,7 @@ function smells(state, context) {
   return found;
 }
 
-let contextText = '';
-const contextPath = findMemoryFile(projectDir, 'CONTEXT');
-if (contextPath) { try { contextText = fs.readFileSync(contextPath, 'utf8'); } catch {} }
-const found = smells(stateText, contextText);
+const found = smells(texts.STATE, texts.CONTEXT ?? '');
 if (found.length) {
   const shown = found.slice(0, 6).join('; ') + (found.length > 6 ? `; and ${found.length - 6} more` : '');
   reasons.push([

@@ -1,10 +1,11 @@
 # Pitfalls — traps that cost real debugging time
 
-<!-- An entry earns its place when the same class of bug has bitten TWICE.
-     Format: the trap, its tell, the fix. Delete entries when the trap no longer applies. -->
+<!-- An entry earns its place when the same class of bug has bitten TWICE. Shape: a heading,
+     then Trap, Tell, Fix — under 12 lines, no story. Delete entries when the trap no longer
+     applies. The check after wrap-up names entries that break the shape. -->
 
 ## <Short name of the trap>
 
-- **The trap:** <what goes wrong>
-- **The tell:** <how you recognize you're in it>
-- **Instead:** <what to do>
+**Trap:** <what goes wrong>
+**Tell:** <how you recognize you're in it>
+**Fix:** <what to do instead>

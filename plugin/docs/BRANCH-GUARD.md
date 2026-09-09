@@ -27,7 +27,9 @@ silent under the rules.
 | Push `dev` | Allowed | Allowed |
 | Push `main`, `--all`, or any other branch | Allowed | Asks |
 | Force-push, delete a remote branch | Allowed | Asks |
-| Rebase, `reset --hard`, delete or rename a branch | Allowed | Asks |
+| Rebase, `reset --hard`, `branch -d`, rename a branch | Allowed | Asks |
+| Force-delete a branch (`branch -D`), `worktree remove --force` | Asks | Asks |
+| `worktree remove` (no force), `worktree prune` | Allowed | Allowed |
 | `gh pr merge` | Allowed | Asks |
 
 "Refused" tells the model why and what to do instead; the user never sees it. "Asks" is
@@ -54,6 +56,15 @@ exception; `worktrees` covers `git worktree add`, `EnterWorktree` and agents run
 worktree isolation. The release prompts for `main` and the prompts for force-push,
 rebase, hard reset and branch deletion are protocol, not strictness, and stay as they
 are. A missing or invalid file means the defaults.
+
+## Leftovers
+
+The guard stops new stray branches; it does not delete old ones. Session start lists
+what exists besides the working branch (see [session memory](SESSION-MEMORY.md)), the
+wrap-up verifier stays incomplete while an unmerged branch is not named in STATE.md, and
+the `clean-branches` skill ("clean up the branches") walks through them: merged ones
+deleted after a yes, unmerged ones shown so the user picks merge, keep or delete. The
+prompts for force-delete and forced worktree removal apply there too.
 
 ## Limits
 

@@ -108,11 +108,14 @@ verification rules there if you maintain an override.
 ## Daily rhythm
 
 - **Open a session** → startup has synced `dev` if safe and loaded current project memory; if
-  anything needs a decision (dirty tree, diverged branch), Claude tells you before work
-  starts. Ask "what's next?" — the answer comes from `STATE.md`.
+  anything needs a decision (dirty tree, diverged branch, a leftover branch or worktree),
+  Claude tells you before work starts. Ask "what's next?" — the answer comes from `STATE.md`.
+  Say "clean up the branches" when the leftover list should go; nothing is deleted without
+  your yes.
 - **Work** → normal. Claude keeps `STATE.md` honest as things move, and the branch guard
   keeps the work on the working branch; the only git prompts you see are release steps.
-- **End the session** → say "wrap up." Memory gets updated and compacted, then `dev`
+- **End the session** → say "wrap up." Memory gets updated and trimmed (the check after
+  wrap-up makes sure the trim happened, and reports the file sizes), then `dev`
   is committed and pushed (you approve the push). Your collaborators' next session
   starts from what yours learned.
 

@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { loadProjectMemory } from './lib/project-memory.mjs';
 import { inspectProject } from './lib/project-inspection.mjs';
 import { verifyWrapUp } from './lib/wrap-up-verifier.mjs';
+import { branchInventory, describeInventory } from './lib/branch-inventory.mjs';
+import { memorySizes, describeMemorySize } from './lib/memory-hygiene.mjs';
 
 const HANDOFF_ISSUES = {
   branch: 'not on the working branch',
@@ -14,6 +16,7 @@ const HANDOFF_ISSUES = {
   operation: 'an unfinished merge, rebase, cherry-pick or revert',
   commits: 'no commit yet',
   worktree: 'uncommitted or untracked changes',
+  branches: 'a stray branch or worktree with commits that STATE.md does not name',
   remote: 'dev does not match origin as of the fetch (unpushed, behind or diverged)',
   handoff: 'no usable Start here block in STATE.md (three fields; the first step names a file, route or command)',
   'shared-memory': 'STATE.md is not committed on the shared branch',
@@ -27,11 +30,24 @@ function handoffLine(cwd) {
     const issues = report.checks.filter(c => c.status !== 'passed')
       .map(c => (HANDOFF_ISSUES[c.id] ?? c.id) + (c.status === 'unknown' ? ' (could not be checked)' : ''));
     if (!issues.length) {
-      return '[handoff] The previous handoff passes the mechanical checks: working branch, clean checkout, no unfinished Git operation, usable Start here block' +
+      return '[handoff] The previous handoff passes the mechanical checks: working branch, clean checkout, no unfinished Git operation, no stray branch with unrecorded work, usable Start here block' +
         (report.scope === 'shared-dev' ? ', dev matches origin as of the fetch' : '') + '.';
     }
     return `[handoff] The previous handoff is ${report.status}: ${issues.join('; ')}. Tell the user in one line before starting work; do not fix it silently.`;
   } catch { return ''; }
+}
+
+// Leftover branches and worktrees, so clutter and parked work stop being invisible.
+function branchesLine(cwd) {
+  try {
+    const project = inspectProject(cwd);
+    return project.isGit ? describeInventory(branchInventory(project.root, project.workflow)) : '';
+  } catch { return ''; }
+}
+
+// How much memory the project carries and what is over guidance: the cost, made visible.
+function sizeLine(cwd) {
+  try { return describeMemorySize(memorySizes(inspectProject(cwd).memory)); } catch { return ''; }
 }
 
 try {
@@ -58,6 +74,10 @@ try {
     if (syncFailed) chunks.push('[git-sync] Startup sync did not complete; the checkout may be behind the remote. Inspect Git status before starting shared work.');
     const handoff = handoffLine(cwd);
     if (handoff) chunks.push(handoff);
+    const branches = branchesLine(cwd);
+    if (branches) chunks.push(branches);
+    const size = sizeLine(cwd);
+    if (size) chunks.push(size);
     chunks.push(memory);
   }
   if (chunks.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: {

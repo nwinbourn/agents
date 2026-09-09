@@ -25,6 +25,7 @@ current directory; nested paths are resolved to the Git working-tree root.
 | Operation | No unfinished merge, rebase, cherry-pick or revert markers |
 | Commits | HEAD resolves to a commit |
 | Worktree | No staged, unstaged or untracked changes, including submodule changes |
+| Branches | No local branch or worktree carries commits that are not on the working branch unless STATE.md names it; merged leftovers are listed as safe to delete, and do not fail the check |
 | Handoff | One Start here section with unique, nonempty Do this first, Waiting on you and Mid-flight fields; Do this first names a file, route or command (a path, a backticked command, a URL or a commit). A field is its label line plus the lines directly under it, up to a blank line, so a list under a label counts. Anything else in the block is reported as extra content |
 | Shared memory | The selected STATE.md exists in HEAD on a shared project |
 | Remote | For shared projects, HEAD equals live origin/dev, queried with git ls-remote |
