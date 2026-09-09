@@ -52,6 +52,7 @@ function publish(writer, name = 'remote.txt') {
 }
 const arm = dir => hook('wrap-up-arm.mjs', dir, { tool_name: 'Skill', tool_input: { skill: 'agents:wrap-up' } });
 const bloat = dir => hook('wrap-up-bloat-check.mjs', dir);
+const handoff = '# State\n\n## Start here\n\n**Do this first:** inspect app.txt\n**Waiting on you:** nothing\n**Mid-flight:** nothing\n';
 
 try {
   check('memory: unadopted projects are untouched', () => {
@@ -91,9 +92,23 @@ try {
     const dir = folder(); write(dir, 'STATE.md', 'line\n'.repeat(710));
     arm(dir); assert.equal(bloat(dir).decision, 'block'); assert.equal(bloat(dir), null);
   });
-  check('wrap-up: lean state passes after invocation', () => {
-    const dir = folder(); write(dir, 'STATE.md', '# State\nNext: inspect app.\n');
+  check('wrap-up: lean state with a usable handoff passes after invocation', () => {
+    const dir = folder(); write(dir, 'STATE.md', handoff + '\n## What\'s next\n\n1. inspect app.\n');
     arm(dir); assert.equal(bloat(dir), null);
+  });
+  check('wrap-up: a missing or vague Start here block is flagged once', () => {
+    const dir = folder(); write(dir, 'STATE.md', '# State\nNext: inspect app.\n');
+    arm(dir); const r = bloat(dir); assert.equal(r.decision, 'block'); assert.match(r.reason, /Start here/); assert.equal(bloat(dir), null);
+    write(dir, 'STATE.md', handoff.replace('inspect app.txt', 'Continue the redesign'));
+    arm(dir); assert.match(bloat(dir).reason, /file, route or command/);
+  });
+  check('wrap-up: changelog lines and facts duplicated from CONTEXT.md are flagged', () => {
+    const dir = folder(); const fact = 'The checkout service retries three times before it gives up on a payment.';
+    write(dir, 'CONTEXT.md', `# Context\n\n${fact}\n`);
+    write(dir, 'STATE.md', `${handoff}\n## Notes\n\n- 2026-09-01 we added the retry loop\n${fact}\n\n<!-- we fixed nothing here: comments are ignored -->\n`);
+    arm(dir); const r = bloat(dir); assert.equal(r.decision, 'block');
+    assert.match(r.reason, /line 11: dated entry/); assert.match(r.reason, /line 12: duplicated in CONTEXT.md/); assert(!/line 14/.test(r.reason));
+    assert.equal(bloat(dir), null);
   });
   check('wrap-up: large growth against committed state prompts compaction', () => {
     const dir = repository();

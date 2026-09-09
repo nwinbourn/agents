@@ -274,16 +274,16 @@ export function decide(op, state) {
   const deny = reason => ({ decision: 'deny', reason, current: state.current });
   switch (op.kind) {
     case 'worktree':
-      return deny(`branch-guard: worktrees are not used in this project; each one becomes a stray branch. Work in this checkout on '${state.current ?? (shared ? BRANCH : state.trunk)}'. ${rules}`);
+      return soften(state, 'worktrees', deny(`branch-guard: worktrees are not used in this project; each one becomes a stray branch. Work in this checkout on '${state.current ?? (shared ? BRANCH : state.trunk)}'. ${rules}`));
     case 'create': {
       const target = String(op.target ?? '').replace(/^refs\/heads\//, '');
       if (shared) {
         if (target === BRANCH) return allow(BRANCH);
         if (target.startsWith('wip/')) return ask(`branch-guard: '${target}' — a wip/ branch exists only to park commits after a merge conflict the user cannot resolve. Approve only if that is what is happening. ${rules}`, target);
-        return deny(`branch-guard: '${BRANCH}' is the only working branch in this project. Creating '${target}' is not allowed; commit on ${BRANCH} instead. ${rules}`);
+        return soften(state, 'taskBranches', deny(`branch-guard: '${BRANCH}' is the only working branch in this project. Creating '${target}' is not allowed; commit on ${BRANCH} instead. ${rules}`), target);
       }
       if (target === BRANCH) return ask(`branch-guard: creating '${BRANCH}' switches this project to the shared dev → main flow. Only for a live, multi-person project with the user's explicit go-ahead. ${rules}`, BRANCH);
-      return deny(`branch-guard: this project works directly on '${state.trunk}'. Creating '${target}' is not allowed; no task branches, no worktrees. Do the work on ${state.trunk}. ${rules}`);
+      return soften(state, 'taskBranches', deny(`branch-guard: this project works directly on '${state.trunk}'. Creating '${target}' is not allowed; no task branches, no worktrees. Do the work on ${state.trunk}. ${rules}`), target);
     }
     case 'checkout': {
       let target = op.target;
@@ -334,6 +334,14 @@ export function decide(op, state) {
     default:
       return allow();
   }
+}
+
+// Personal settings (~/.claude/branch-guard.json) can turn a refusal into a prompt or drop it.
+function soften(state, key, denial, next = state.current) {
+  const mode = state.settings?.[key];
+  if (mode === 'allow') return { decision: 'allow', reason: '', current: next };
+  if (mode === 'ask') return { ...denial, decision: 'ask', current: next };
+  return denial;
 }
 
 function switchTo(target, state, shared, rules) {

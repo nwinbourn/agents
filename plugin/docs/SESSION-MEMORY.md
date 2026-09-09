@@ -43,6 +43,17 @@ Compaction does not run this hook. Startup/resume/clear always reread disk rathe
 than using a cached memory copy. The project's CLAUDE.md loader remains a portable
 fallback; the startup context reflects files after this sync attempt.
 
+## The previous handoff
+
+Startup also checks what the last session left behind, mechanically, with the
+wrap-up verifier run against the checkout after the sync attempt: working branch,
+clean checkout, no unfinished Git operation, a usable Start here block (three fields,
+first step naming a file, route or command) and, on shared projects, whether `dev`
+matches `origin/dev` as of that fetch. The result is one `[handoff]` line that the
+agent must relay to the user before starting work. It comes from git, not from the
+prose in STATE.md, so a confident Start here block cannot hide uncommitted or
+unpushed work.
+
 Memory selection and injection do not prove that the agent understands the files,
 that they are accurate, or that no concurrent writer changes them afterward. The
 wrap-up verifier and live evaluation scenarios cover the other end of the workflow.

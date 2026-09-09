@@ -111,6 +111,15 @@ try {
     const output=load(join(tree,'src'));assert(output.includes('linked-only'));assert(!output.includes('project-context-marker'));
     assert.equal(readFileSync(join(dir,'CONTEXT.md'),'utf8'),'project-context-marker');
   });
+  test('startup reports the previous handoff from git, not from prose',()=>{
+    const dir=local();assert.match(load(dir),/\[handoff\] The previous handoff passes/);
+    write(dir,'app.txt','unsaved');write(dir,'STATE.md',state.replace('inspect app.txt','Continue the redesign'));
+    const output=load(dir);assert.match(output,/\[handoff\] The previous handoff is incomplete/);assert.match(output,/uncommitted or untracked changes/);assert.match(output,/Start here block/);
+  });
+  test('startup notices unpushed shared work',()=>{
+    const {client}=shared();write(client,'app.txt','local commit');git(client,'add','.');git(client,'commit','-m','Unpushed');
+    assert.match(load(client),/dev does not match origin/);
+  });
   console.log(`${passed} startup memory checks passed`);
 } finally {
   // Only remove this run's newly allocated absolute temporary directory.

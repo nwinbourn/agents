@@ -10,20 +10,20 @@ isolated identity/configuration and do not contact GitHub or modify your project
 
 | Area | Automated evidence | What it does not prove |
 |---|---|---|
-| Startup memory | Ordered sync/load, subfolder and worktree roots, docs fallback, missing/unreadable files, bounded excerpts, offline/dirty behavior and marker consistency | Semantic relevance or correctness of memory; live model behavior |
+| Startup memory | Ordered sync/load, subfolder and worktree roots, docs fallback, missing/unreadable files, bounded excerpts, offline/dirty behavior, marker consistency, and the previous-handoff line (clean, dirty or unpushed) | Semantic relevance or correctness of memory; live model behavior |
 | Memory | Adoption detection, newer-file reminder, loop prevention, docs/STATE support, ignored build output | Semantic accuracy; deletions alone are not detected by the mtime heuristic |
 | Dev workflow | Clean fast-forward, dirty-tree preservation, divergence handling, wrong-branch warning, unpushed work notice, unavailable remote, compaction skip | Blocking arbitrary writes/commits on main; live remote permissions |
-| Wrap-up | Skill marker recognition, one-shot checks, lean state, excessive growth/length, expired markers | That an LLM follows the complete prose procedure or resolves conflicts correctly |
-| Verifier | Branch, worktree, conflict/operation state, live remote equality/failure, committed shared memory, handoff fields and read-only behavior | Semantic accuracy, intended commit scope or background worker completion |
+| Wrap-up | Skill marker recognition, one-shot checks, lean state, excessive growth/length, expired markers, missing or vague Start here block, dated and "we added" lines, facts duplicated from CONTEXT.md | That an LLM follows the complete prose procedure or resolves conflicts correctly; changelog creep phrased in ways the patterns miss |
+| Verifier | Branch, worktree, conflict/operation state, live remote equality/failure, tracking-mode comparison, committed shared memory, handoff fields, vague first step and read-only behavior | Semantic accuracy, intended commit scope or background worker completion |
 | Handoff | Scripted memory/code commit and push, followed by the next session's sync | Autonomous execution of the wrap-up skill; the test driver performs the commit/push |
-| Branch guard | Task branches, worktrees and worktree-isolated agents refused in adopted projects; commits kept on dev; release prompts for main; prompts for force-push, rebase, hard reset and branch deletion; chained commands, quoted text, heredocs, PowerShell, `cd` and `git -C` targeting; read-only behavior | Git run outside the Bash/PowerShell tools, aliases, scripts that call git, other agents |
+| Branch guard | Task branches, worktrees and worktree-isolated agents refused in adopted projects; commits kept on dev; release prompts for main; prompts for force-push, rebase, hard reset and branch deletion; chained commands, quoted text, heredocs, PowerShell, `cd` and `git -C` targeting; personal settings softening refusals; read-only behavior | Git run outside the Bash/PowerShell tools, aliases, scripts that call git, other agents |
 | Harness | Modes, attempt thresholds, inherited/unknown models, concurrent counter updates, failure handling, read-only status | Delegation quality, accurate active-worker counts, or a cost budget |
 | Packaging | Only plugin files in the payload; suites run with the repository files absent from that copy | A full Claude installer session; Git marketplace checkouts may include tests |
 
 ## Local validation
 
-The 0.13.0 working tree passes 109 checks (18 core workflow, 16 startup memory,
-20 wrap-up verifier, 15 branch guard and 40 harness), plus packaging and syntax
+The 0.14.0 working tree passes 118 checks (20 core workflow, 18 startup memory,
+24 wrap-up verifier, 16 branch guard and 40 harness), plus packaging and syntax
 checks, locally on Windows with Node 24.15.0. All suites run against an isolated plugin copy. Hosted
 cross-platform CI and live agent evaluation remain separate release checks.
 

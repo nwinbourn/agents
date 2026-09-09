@@ -70,8 +70,9 @@ projects also get notices when required memory is missing. Other projects stay s
 Memory files also turn on the branch guard: Claude cannot create task branches or
 worktrees in the project. With `origin/dev` it also cannot commit off `dev`, and
 anything that touches `main` (switching to it, merging into it, pushing it) asks you
-first, because that is a release. Creating `dev` itself always asks. Details and limits:
-[branch guard](BRANCH-GUARD.md).
+first, because that is a release. Creating `dev` itself always asks. A team that works
+with feature branches or worktree agents can soften the refusals to prompts in
+`~/.claude/branch-guard.json`. Details and limits: [branch guard](BRANCH-GUARD.md).
 
 ## Optional: the agent harness
 

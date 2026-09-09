@@ -39,6 +39,22 @@ refused at the first step. Text inside quotes, heredocs and comments is ignored.
 and `git -C` move the check to that directory, and a subfolder resolves to its
 repository root.
 
+## Settings
+
+The two refusals can be softened per person, never per project, in
+`~/.claude/branch-guard.json`:
+
+```json
+{ "taskBranches": "deny", "worktrees": "deny" }
+```
+
+Each value is `deny` (the default), `ask` (a permission prompt carrying the reason) or
+`allow`. `taskBranches` covers creating any branch other than `dev` or the `wip/`
+exception; `worktrees` covers `git worktree add`, `EnterWorktree` and agents run with
+worktree isolation. The release prompts for `main` and the prompts for force-push,
+rebase, hard reset and branch deletion are protocol, not strictness, and stay as they
+are. A missing or invalid file means the defaults.
+
 ## Limits
 
 - It sees commands run through the Bash and PowerShell tools. Git run through another

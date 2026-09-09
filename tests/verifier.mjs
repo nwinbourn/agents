@@ -131,6 +131,30 @@ try {
   test('invalid CLI arguments return unknown without side effects',()=>{
     const dir=local();const before=readdirSync(dir);assert.equal(verify(dir,false,['--unexpected']).status,'unknown');assert.deepEqual(readdirSync(dir),before);
   });
+  test('a vague first step is incomplete, a concrete one passes',()=>{
+    const dir=local();write(dir,'STATE.md',state.replace('review app.txt','Continue the redesign'));save(dir);
+    const r=verify(dir);assert.equal(check(r,'handoff').status,'incomplete');assert.equal(check(r,'handoff').vague,true);
+    write(dir,'STATE.md',state.replace('review app.txt','run `npm test` and fix the first failure'));save(dir);assert.equal(verify(dir).status,'passed');
+  });
+  test('tracking mode compares against the last fetch without the network',()=>{
+    const {dir,remote}=shared();const peer=join(base,'peer-tracking');git(base,'clone','--branch','dev',remote,peer);
+    write(peer,'app.txt','peer changes\n');save(peer);git(peer,'push','origin','dev');
+    const tracking=verify(dir,false,['--remote','tracking']);assert.equal(tracking.status,'passed');assert.match(check(tracking,'remote').message,/as of the last fetch/);
+    assert.equal(check(verify(dir),'remote').status,'incomplete');
+    git(dir,'fetch','origin','dev');assert.equal(check(verify(dir,false,['--remote','tracking']),'remote').status,'incomplete');
+  });
+  test('handoff fields may continue on the lines below their label',()=>{
+    const dir=local();
+    const body='# State\n\n## Start here\n\n**Do this first:** A testing pass, in order:\n1. open `app.txt` and read it\n2. say what you see\n**Waiting on you:**\n- the wording of the retry message\n**Mid-flight:**\nnothing\n\n## Phases\n';
+    write(dir,'STATE.md',body);save(dir);const r=verify(dir);assert.equal(r.status,'passed');
+    const h=check(r,'handoff');assert.equal(h.extraLines,0);assert.match(h.fields['Waiting on you'],/retry message/);assert.match(h.fields['Do this first'],/say what you see/);
+    write(dir,'STATE.md',body.replace('- the wording of the retry message\n',''));save(dir);
+    const again=check(verify(dir),'handoff');assert.equal(again.status,'incomplete');assert.deepEqual(again.invalidFields,['Waiting on you']);
+  });
+  test('content beyond the three fields is reported without failing the handoff',()=>{
+    const dir=local();write(dir,'STATE.md',state+'\n> ALL WORK HAPPENS ON dev\n\n```bash\nnpm run dev\n```\n\nAlso: delete .next/ after a crash.\n\n## Phases\n');save(dir);
+    const r=verify(dir);assert.equal(r.status,'passed');const h=check(r,'handoff');assert.equal(h.extraLines,3);assert.equal(h.lines,6);
+  });
   console.log(`${passed} wrap-up verifier checks passed`);
 } finally {
   // The only deletion target is this run's freshly allocated absolute temp root.

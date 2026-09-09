@@ -169,6 +169,23 @@ try {
     assert.deepEqual(snapshot(dir), before);
     assert(!existsSync(join(dir, '..', 'tree')));
   });
+  await test('personal settings soften the refusals for other people', () => {
+    const dir = shared(); const settings = join(home, '.claude', 'branch-guard.json'); mkdirSync(dirname(settings), { recursive: true });
+    try {
+      writeFileSync(settings, JSON.stringify({ taskBranches: 'ask', worktrees: 'allow' }));
+      assert.equal(decision(sh(dir, 'git checkout -b feature')), 'ask');
+      assert.equal(sh(dir, 'git worktree add ../tree'), null);
+      assert.equal(hook(dir, 'EnterWorktree', {}), null);
+      assert.equal(decision(sh(dir, 'git commit -m x && git push origin main')), 'ask');
+      writeFileSync(settings, JSON.stringify({ taskBranches: 'allow', worktrees: 'ask' }));
+      assert.equal(sh(dir, 'git switch -c feature'), null);
+      assert.equal(decision(hook(dir, 'Agent', { isolation: 'worktree', prompt: 'x' })), 'ask');
+      writeFileSync(settings, '{not json');
+      assert.equal(decision(sh(dir, 'git switch -c feature')), 'deny');
+      writeFileSync(settings, JSON.stringify({ taskBranches: 'whatever' }));
+      assert.equal(decision(sh(dir, 'git switch -c feature')), 'deny');
+    } finally { rmSync(settings, { force: true }); }
+  });
   await test('malformed events exit silently', () => {
     const dir = shared();
     for (const raw of ['', 'null', '[]', '{', '{"cwd":42}', '{"tool_name":"Bash"}', '{"tool_name":"Bash","tool_input":"git checkout -b x"}', '{"tool_name":"Bash","tool_input":{"command":42}}']) {

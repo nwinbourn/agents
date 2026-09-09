@@ -4,7 +4,10 @@ This is an independent implementation of the agents repository's workflow requir
 It includes no DeepSeek source code or runtime dependency. The repository's existing
 license is unchanged.
 
-The wrap-up skill runs the verifier at its final step. You can also invoke it directly:
+It runs three times without anyone asking: the wrap-up skill runs it at its final
+step, the Stop hook that fires after `/wrap-up` re-checks the Start here block on its
+own, and the next session start runs the whole check again in tracking mode and
+reports the result. You can also invoke it directly:
 
 ```sh
 node "<plugin-root>/hooks/wrap-up-verify.mjs" --project "<project-directory>" --check-remote
@@ -22,7 +25,7 @@ current directory; nested paths are resolved to the Git working-tree root.
 | Operation | No unfinished merge, rebase, cherry-pick or revert markers |
 | Commits | HEAD resolves to a commit |
 | Worktree | No staged, unstaged or untracked changes, including submodule changes |
-| Handoff | One Start here section with unique, nonempty Do this first, Waiting on you and Mid-flight fields |
+| Handoff | One Start here section with unique, nonempty Do this first, Waiting on you and Mid-flight fields; Do this first names a file, route or command (a path, a backticked command, a URL or a commit). A field is its label line plus the lines directly under it, up to a blank line, so a list under a label counts. Anything else in the block is reported as extra content |
 | Shared memory | The selected STATE.md exists in HEAD on a shared project |
 | Remote | For shared projects, HEAD equals live origin/dev, queried with git ls-remote |
 
@@ -43,7 +46,10 @@ When incomplete and unknown checks coexist, the overall result is incomplete; th
 individual unknown results remain visible. Never discard them.
 
 Without `--check-remote`, shared projects receive an unknown remote result. With it,
-the remote query times out after 15 seconds; failures remain unknown. A deleted remote
+the remote query times out after 15 seconds; failures remain unknown. `--remote
+tracking` compares HEAD with the fetched `origin/dev` instead of querying the
+network, which is what session start uses right after its own fetch; the message
+says "as of the last fetch" so nobody mistakes it for a live check. A deleted remote
 dev branch is incomplete. The query does not fetch objects or update tracking refs.
 Different local/remote hashes mean the shared handoff needs reconciliation; they do
 not alone establish whether work is ahead, behind or diverged.

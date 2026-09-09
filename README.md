@@ -64,16 +64,26 @@ three-line pickup pointer:
 ```
 
 On shared projects, wrap-up includes committing the agreed scope, reconciling remote
-changes and pushing with user approval. An independent verifier checks the branch,
-conflicts, unfinished Git operations,
-commits, clean checkout, handoff fields and (on shared projects) live remote equality.
-It reports passed, incomplete or unknown; an unavailable remote cannot pass.
-The agent still reviews the accuracy of the memory and agreed commit scope.
+changes and pushing with user approval. An independent, read-only verifier checks the
+branch, conflicts, unfinished Git operations, commits, clean checkout, the handoff
+fields and (on shared projects) whether `dev` matches origin. It reports passed,
+incomplete or unknown; an unavailable remote cannot pass.
 See [verifier usage](plugin/docs/WRAP-UP-VERIFIER.md).
 
-The hooks support this ritual: one notices potentially stale STATE files, and another
-checks excessive length or growth after wrap-up. These are heuristics; they cannot
-prove that the prose is accurate or that an agent followed every instruction.
+The checks run whether or not the agent remembers to run them:
+
+- **When wrap-up ends**, a hook checks that STATE.md has a real Start here block
+  (three fields, and a first step that names a file, route or command, so "continue
+  the redesign" is rejected), and flags changelog creep: dated lines, "we added" and
+  "we fixed" narration, log sections, and facts copied word-for-word from CONTEXT.md.
+- **At the next session start**, the verifier runs again against the synced checkout
+  and the agent opens with one line: the previous handoff passed, or it left
+  uncommitted work, an unfinished merge, unpushed commits, or no usable Start here block.
+- **On every turn**, a stop hook notices when project files changed but STATE.md did not.
+
+These checks are mechanical: they prove the handoff's shape and the repository's
+state, not that the prose is accurate. The agent still reviews the memory and the
+agreed commit scope.
 
 ## Install
 
@@ -110,15 +120,18 @@ The suite checks memory reminders, wrap-up markers and bloat, safe Git syncing,
 scripted handoffs, the branch guard, harness behavior, and an isolated copy of the plugin payload.
 See [what is tested and what needs live evaluation](docs/TESTING.md).
 
-## Optional helpers
+## Extras, separate from the core
 
-- [Harness](plugin/skills/harness/SKILL.md): reusable background workers, model routing,
-  ownership and verification rules, with best-effort burst checks. Off until enabled.
+These ship in the same plugin but are not part of the memory → dev → wrap-up loop,
+and the loop does not depend on them. They are off, or inert, until you use them.
+
+- [Harness](plugin/skills/harness/SKILL.md), experimental: reusable background workers,
+  model routing, ownership and verification rules, with best-effort burst checks.
+  Off until `/harness on`.
 - [Voice](plugin/skills/voice/SKILL.md): switchable output styles.
-- [Occam](plugin/skills/occam/SKILL.md): an over-engineering check.
+- [Occam](plugin/skills/occam/SKILL.md): an over-engineering check; its optional hook
+  ships unwired.
 - `/pause` and `/continue`: interruption handling.
-
-The memory → dev workflow → wrap-up loop works without enabling the harness.
 
 ## License
 

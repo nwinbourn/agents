@@ -7,11 +7,25 @@
 //   - origin/dev exists:   commits stay on dev; anything touching main asks,
 //                          because that is a release; force-push, rebase, hard
 //                          reset and branch deletion ask, per AGENTS.md
-// Silent everywhere else, silent under the rules, read-only, fail-open on error.
+// A personal ~/.claude/branch-guard.json can soften the two refusals to prompts
+// or drop them (see docs/BRANCH-GUARD.md). Silent everywhere else, silent under
+// the rules, read-only, fail-open on error.
 import { readFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { inspectProject, runGit } from './lib/project-inspection.mjs';
 import { splitCommands, analyzeCommand, decide, combine } from './lib/branch-policy.mjs';
+
+const MODES = ['deny', 'ask', 'allow'];
+
+function guardSettings() {
+  const settings = { taskBranches: 'deny', worktrees: 'deny' };
+  try {
+    const raw = JSON.parse(readFileSync(join(homedir(), '.claude', 'branch-guard.json'), 'utf8'));
+    for (const key of Object.keys(settings)) if (MODES.includes(raw?.[key])) settings[key] = raw[key];
+  } catch { /* missing or invalid file: defaults */ }
+  return settings;
+}
 
 function emit(decision, reason) {
   if (decision === 'allow') return;
@@ -24,6 +38,7 @@ try {
   const tool = String(data.tool_name ?? '');
   const input = data.tool_input && typeof data.tool_input === 'object' && !Array.isArray(data.tool_input) ? data.tool_input : {};
   const cwd = data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const settings = guardSettings();
 
   let shellDir = cwd; // where the next git command runs; follows `cd` and `git -C`
   const states = new Map();
@@ -40,6 +55,7 @@ try {
       trunk: branchExists('main') ? 'main' : branchExists('master') ? 'master' : 'main',
       current: head.ok ? head.output.trim() : null,
       mergeInProgress: gitDir.ok && existsSync(join(gitDir.output.trim(), 'MERGE_HEAD')),
+      settings,
       probes: {
         branchExists,
         isCommit: ref => Boolean(ref) && !ref.startsWith('-') && git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).ok,
@@ -57,7 +73,9 @@ try {
 
   if (tool === 'EnterWorktree' || ((tool === 'Task' || tool === 'Agent') && input.isolation === 'worktree')) {
     const state = stateFor(cwd);
-    if (state) emit('deny', `branch-guard: this project works on a single branch ('${state.workflow === 'shared-dev' ? 'dev' : state.trunk}'); worktrees create stray branches. Run without worktree isolation. Rules: AGENTS.md → Git flow.`);
+    if (state && settings.worktrees !== 'allow') {
+      emit(settings.worktrees === 'ask' ? 'ask' : 'deny', `branch-guard: this project works on a single branch ('${state.workflow === 'shared-dev' ? 'dev' : state.trunk}'); worktrees create stray branches. Run without worktree isolation. Rules: AGENTS.md → Git flow.`);
+    }
     process.exit(0);
   }
   if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);

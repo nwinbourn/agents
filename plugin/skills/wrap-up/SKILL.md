@@ -81,7 +81,9 @@ what happened, it has become the changelog again.
 ```
 
 `Do this first` must name the file, route or command. "Continue the redesign" is a failure;
-"open `sandbox/foo.html` and say whether it lands" is not.
+"open `sandbox/foo.html` and say whether it lands" is not. This is checked mechanically:
+the Stop hook after wrap-up rejects a first step with no path, backticked command, URL
+or commit, and the next session start re-checks the whole handoff.
 
 ### 4b. If workers ran this session, land their state
 
