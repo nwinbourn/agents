@@ -46,7 +46,10 @@ project with memory files it refuses task branches and worktrees, the usual sour
 a repo full of stray branches. Where `origin/dev` exists it also refuses commits off
 `dev`, and anything that touches `main` (switching to it, merging into it, pushing it)
 becomes a permission prompt, because that is a release. Refusals go to the model with
-the reason; you only see the release prompts. [What it checks](plugin/docs/BRANCH-GUARD.md).
+the reason; you only see the release prompts. For the rare genuine hotfix that must land
+on `main` while `dev` holds unfinished work, `/override` relaxes that one project's
+refusals into approve-prompts for a single, self-clearing window.
+[What it checks](plugin/docs/BRANCH-GUARD.md).
 
 Leftovers from before the guard, or from other tools, are listed at every session start
 with whether they are merged and whether STATE.md knows about them. Say "clean up the
@@ -145,6 +148,10 @@ and the loop does not depend on them. They are off, or inert, until you use them
 - [Voice](plugin/skills/voice/SKILL.md): switchable output styles.
 - [Occam](plugin/skills/occam/SKILL.md): an over-engineering check; its optional hook
   ships unwired.
+- [Override](plugin/docs/BRANCH-GUARD.md#one-time-override): `/override` — a one-time,
+  project-scoped bypass of the branch guard for a genuine hotfix straight to `main`. It
+  turns that repo's hard refusals into approve-prompts for one short window, then clears
+  itself. Nothing goes silent.
 - `/pause` and `/continue`: interruption handling.
 
 ## License

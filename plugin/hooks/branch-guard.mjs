@@ -8,13 +8,16 @@
 //                          because that is a release; force-push, rebase, hard
 //                          reset and branch deletion ask, per AGENTS.md
 // A personal ~/.claude/branch-guard.json can soften the two refusals to prompts
-// or drop them (see docs/BRANCH-GUARD.md). Silent everywhere else, silent under
-// the rules, read-only, fail-open on error.
+// or drop them (see docs/BRANCH-GUARD.md). A one-shot `/override`
+// (branch-guard-override.mjs) can turn this project's hard refusals into prompts for
+// a single hotfix window; see docs/BRANCH-GUARD.md. Silent everywhere else, silent
+// under the rules, read-only, fail-open on error.
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { inspectProject, runGit } from './lib/project-inspection.mjs';
 import { splitCommands, analyzeCommand, decide, combine } from './lib/branch-policy.mjs';
+import { readActiveOverride, OVERRIDE_NOTE } from './branch-guard-override.mjs';
 
 const MODES = ['deny', 'ask', 'allow'];
 
@@ -52,6 +55,7 @@ try {
     const gitDir = git(['rev-parse', '--absolute-git-dir']);
     const state = {
       workflow: project.workflow === 'shared-dev' ? 'shared-dev' : 'local',
+      root: project.root,
       trunk: branchExists('main') ? 'main' : branchExists('master') ? 'master' : 'main',
       current: head.ok ? head.output.trim() : null,
       mergeInProgress: gitDir.ok && existsSync(join(gitDir.output.trim(), 'MERGE_HEAD')),
@@ -74,7 +78,10 @@ try {
   if (tool === 'EnterWorktree' || ((tool === 'Task' || tool === 'Agent') && input.isolation === 'worktree')) {
     const state = stateFor(cwd);
     if (state && settings.worktrees !== 'allow') {
-      emit(settings.worktrees === 'ask' ? 'ask' : 'deny', `branch-guard: this project works on a single branch ('${state.workflow === 'shared-dev' ? 'dev' : state.trunk}'); worktrees create stray branches. Run without worktree isolation. Rules: AGENTS.md → Git flow.`);
+      let decision = settings.worktrees === 'ask' ? 'ask' : 'deny';
+      let reason = `branch-guard: this project works on a single branch ('${state.workflow === 'shared-dev' ? 'dev' : state.trunk}'); worktrees create stray branches. Run without worktree isolation. Rules: AGENTS.md → Git flow.`;
+      if (decision === 'deny' && readActiveOverride(state.root)) { decision = 'ask'; reason = `${reason} | ${OVERRIDE_NOTE}`; }
+      emit(decision, reason);
     }
     process.exit(0);
   }
@@ -93,6 +100,10 @@ try {
     const state = stateFor(op.cwd ? resolve(shellDir, op.cwd) : shellDir);
     if (!state) continue;
     const result = decide(op, state);
+    if (result.decision === 'deny' && readActiveOverride(state.root)) {
+      result.decision = 'ask';
+      result.reason = result.reason ? `${result.reason} | ${OVERRIDE_NOTE}` : OVERRIDE_NOTE;
+    }
     state.current = result.current;
     decisions.push(result);
   }

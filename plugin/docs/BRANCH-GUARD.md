@@ -57,6 +57,30 @@ worktree isolation. The release prompts for `main` and the prompts for force-pus
 rebase, hard reset and branch deletion are protocol, not strictness, and stay as they
 are. A missing or invalid file means the defaults.
 
+## One-time override
+
+The refusals above are the guard doing its job, but one case needs an escape hatch: a genuine
+hotfix that has to land on `main` while `dev` holds a big, unfinished change. A commit off `dev`
+is a hard refusal the user never sees a prompt for, so there is otherwise no way through.
+
+`/override` arms a one-shot, project-scoped relaxation. While it is armed, every hard refusal for
+that one repository becomes an ordinary permission prompt instead — the wall becomes an
+approve-click. Nothing is silenced: switching to `main`, committing and pushing each still prompt,
+and the user approves each one. It is scoped to a single repository, expires on its own after a
+short window (15 minutes by default), and the command clears it as soon as the fix is in.
+
+```sh
+node "<plugin-root>/hooks/branch-guard-override.mjs" arm     # turn this repo's refusals into prompts
+node "<plugin-root>/hooks/branch-guard-override.mjs" status  # is it on, and for how long
+node "<plugin-root>/hooks/branch-guard-override.mjs" clear   # back to normal now
+```
+
+It relaxes only the hard refusals (commit off `dev`, task-branch and worktree creation). The
+prompts that are already prompts — the `main` release prompt, force-push, rebase, hard reset,
+branch deletion — stay exactly as they are; the override never widens them and never makes
+anything silent. State lives in `~/.claude/branch-guard-override.json`; a missing or expired file
+means no override, and like everything else here an internal error fails safe to no override.
+
 ## Leftovers
 
 The guard stops new stray branches; it does not delete old ones. Session start lists

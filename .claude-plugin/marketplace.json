@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Project memory, shared dev workflow and end-of-session handoffs.",
-    "version": "0.15.0"
+    "version": "0.16.0"
   },
   "plugins": [
     {
