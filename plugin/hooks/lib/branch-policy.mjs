@@ -5,7 +5,22 @@
 
 const WRAPPERS = new Set(['sudo', 'command', 'exec', 'env', 'time', 'nohup', 'nice', 'builtin']);
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env']);
+const MERGE_VALUE_OPTIONS = new Set(['-m', '-s', '-X', '-F', '--strategy', '--strategy-option', '--file', '--into-name']);
 const BRANCH = 'dev';
+const DEV_REFS = new Set([BRANCH, `origin/${BRANCH}`, `refs/heads/${BRANCH}`, `refs/remotes/origin/${BRANCH}`]);
+export const WORKTREE_HOME = '.claude/worktrees';
+
+/**
+ * A task branch on a dev project: feature/<task> or fix/<task>, lowercase words joined
+ * by dashes. It is made off dev, lives in its own worktree and merges back at wrap-up.
+ * @param {unknown} name
+ */
+export function isTaskBranch(name) {
+  return typeof name === 'string' && name.length <= 64 && /^(?:feature|fix)\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name);
+}
+
+const openCommand = (target, create = true) =>
+  `git worktree add ${WORKTREE_HOME}/${target.slice(target.indexOf('/') + 1)} ${create ? `-b ${target} ${BRANCH}` : target}`;
 
 /**
  * Split a bash or PowerShell command string into simple commands, each an array of
@@ -140,16 +155,22 @@ function analyzeGit(sub, args) {
     case 'switch': return parseSwitch(args);
     case 'branch': return parseBranch(args);
     case 'worktree':
-      if (args[0] === 'add') return { kind: 'worktree' };
+      if (args[0] === 'add') return parseWorktreeAdd(args.slice(1));
       return args[0] === 'remove' && has('--force', '-f') ? { kind: 'worktree-remove-force' } : null;
-    case 'stash': return args[0] === 'branch' && args[1] ? { kind: 'create', target: args[1] } : null;
+    case 'stash': return args[0] === 'branch' && args[1] ? { kind: 'create', target: args[1], inPlace: true } : null;
     case 'commit': return { kind: 'commit' };
     case 'cherry-pick':
     case 'revert': return has('--abort', '--quit', '--skip') ? null : { kind: 'commit' };
-    case 'merge':
+    case 'merge': {
       if (has('--abort', '--quit')) return null;
       if (has('--continue')) return { kind: 'commit' };
-      return { kind: 'merge' };
+      const sources = [];
+      for (let i = 0; i < args.length; i++) {
+        if (MERGE_VALUE_OPTIONS.has(args[i])) i++;
+        else if (!args[i].startsWith('-')) sources.push(args[i]);
+      }
+      return { kind: 'merge', sources };
+    }
     case 'rebase': return has('--abort', '--quit', '--continue', '--skip') ? null : { kind: 'rebase' };
     case 'reset': return has('--hard') ? { kind: 'reset-hard' } : null;
     case 'push': return parsePush(args);
@@ -174,8 +195,8 @@ function parseCheckout(args) {
     else if (a.startsWith('-') && a !== '-') continue;
     else positional.push(a);
   }
-  if (create) return { kind: 'create', target: create };
-  if (track && positional[0]) return { kind: 'create', target: positional[0].replace(/^[^/]+\//, '') };
+  if (create) return { kind: 'create', target: create, inPlace: true };
+  if (track && positional[0]) return { kind: 'create', target: positional[0].replace(/^[^/]+\//, ''), inPlace: true };
   if (paths) return null;
   if (detach) return { kind: 'detach' };
   if (!positional.length) return null;
@@ -197,11 +218,31 @@ function parseSwitch(args) {
     else if (a.startsWith('-') && a !== '-') continue;
     else positional.push(a);
   }
-  if (create) return { kind: 'create', target: create };
-  if (track && positional[0]) return { kind: 'create', target: positional[0].replace(/^[^/]+\//, '') };
+  if (create) return { kind: 'create', target: create, inPlace: true };
+  if (track && positional[0]) return { kind: 'create', target: positional[0].replace(/^[^/]+\//, ''), inPlace: true };
   if (detach) return { kind: 'detach' };
   if (!positional.length) return null;
   return { kind: 'checkout', target: positional[0], maybePath: false };
+}
+
+// git worktree add [-f] [--detach] [--lock [--reason <text>]] [--orphan] [(-b | -B) <branch>] <path> [<commit-ish>]
+function parseWorktreeAdd(args) {
+  let create = null;
+  let detach = false;
+  let orphan = false;
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') { positional.push(...args.slice(i + 1)); break; }
+    if (a === '-b' || a === '-B') create = args[++i] ?? create;
+    else if (/^-[bB].+/.test(a)) create = a.slice(2);
+    else if (a === '--reason') i++;
+    else if (a === '-d' || a === '--detach') detach = true;
+    else if (a === '--orphan') orphan = true;
+    else if (a.startsWith('-')) continue;
+    else positional.push(a);
+  }
+  return { kind: 'worktree', path: positional[0] ?? null, start: positional[1] ?? null, create, detach, orphan };
 }
 
 const BRANCH_LIST_FLAGS = new Set(['--list', '--all', '--remotes', '--verbose', '--show-current', '--contains', '--no-contains',
@@ -232,8 +273,8 @@ function parseBranch(args) {
   if (mode === 'list') return null;
   if (mode === 'delete') return { kind: 'branch-delete', target: positional[0] ?? null, force };
   if (mode === 'rename') return { kind: 'branch-rename', target: positional[positional.length - 1] ?? null };
-  if (mode === 'copy') return positional.length ? { kind: 'create', target: positional[positional.length - 1] } : null;
-  return positional.length ? { kind: 'create', target: positional[0] } : null;
+  if (mode === 'copy') return positional.length ? { kind: 'create', target: positional[positional.length - 1], start: positional.length > 1 ? positional[0] : null } : null;
+  return positional.length ? { kind: 'create', target: positional[0], start: positional[1] ?? null } : null;
 }
 
 function parsePush(args) {
@@ -268,7 +309,9 @@ function parsePush(args) {
 /**
  * Decide one operation against a project. `state` carries workflow ('local' |
  * 'shared-dev'), trunk ('main' | 'master'), current (branch, or null when detached),
- * mergeInProgress, and probes { branchExists, isCommit, pathExists, previousBranch }.
+ * mergeInProgress, and probes { branchExists, isCommit, pathExists, previousBranch,
+ * worktreePlace } where worktreePlace(path) is 'ok', 'outside' (not under
+ * WORKTREE_HOME) or 'not-ignored' (Git would see the folder as untracked work).
  * Returns { decision: 'allow' | 'ask' | 'deny', reason, current } where `current`
  * is the branch after the operation, for the next command in a chain.
  */
@@ -278,15 +321,39 @@ export function decide(op, state) {
   const allow = (current = state.current) => ({ decision: 'allow', reason: '', current });
   const ask = (reason, current = state.current) => ({ decision: 'ask', reason, current });
   const deny = reason => ({ decision: 'deny', reason, current: state.current });
+  const example = `git worktree add ${WORKTREE_HOME}/<task> -b feature/<task> ${BRANCH}`;
+  const misfit = target => soften(state, 'taskBranches', deny(`branch-guard: '${target}' is not a branch this project uses. Work goes straight on '${BRANCH}', or, when the user chose a branch, on feature/<task> or fix/<task> made off ${BRANCH} in its own folder: \`${example}\`. ${rules}`), target);
+  // A new task branch (not checked out here): off dev, with the user's approval.
+  const openTaskBranch = (target, start) => {
+    const from = start ?? state.current; // git branches from HEAD when no start point is given
+    if (state.probes.branchExists(target)) return deny(`branch-guard: '${target}' already exists. Reopen it in its folder with \`${openCommand(target, false)}\`, or pick a new name. ${rules}`);
+    if (!DEV_REFS.has(from)) return soften(state, 'taskBranches', deny(`branch-guard: '${target}' must be made off '${BRANCH}', not ${from ? `'${from}'` : 'a detached HEAD'}. Use \`${openCommand(target)}\`. ${rules}`));
+    return ask(`branch-guard: open a new branch '${target}' off '${BRANCH}' in its own folder? Approve only if the user chose a branch for this work; straight on '${BRANCH}' is the default. It merges back into ${BRANCH} at wrap-up. ${rules}`);
+  };
   switch (op.kind) {
-    case 'worktree':
-      return soften(state, 'worktrees', deny(`branch-guard: worktrees are not used in this project; each one becomes a stray branch. Work in this checkout on '${state.current ?? (shared ? BRANCH : state.trunk)}'. ${rules}`));
+    case 'worktree': {
+      if (!shared) return soften(state, 'worktrees', deny(`branch-guard: worktrees are not used in this project; each one becomes a stray branch. Work in this checkout on '${state.current ?? state.trunk}'. ${rules}`));
+      const refuse = why => soften(state, 'worktrees', deny(`branch-guard: ${why} ${rules}`));
+      if (op.detach || op.orphan) return refuse(`a worktree here holds one feature/ or fix/ branch made off '${BRANCH}'; detached and orphan worktrees are not used. Open one with \`${example}\`.`);
+      const place = op.path ? state.probes.worktreePlace(op.path) : 'outside';
+      if (place === 'outside') return refuse(`branch folders live in ${WORKTREE_HOME}/<task>. Open one with \`${example}\`.`);
+      if (place === 'not-ignored') return deny(`branch-guard: ${WORKTREE_HOME}/ is not ignored by Git here, so a branch folder would show up as untracked work on '${BRANCH}'. Add the line \`${WORKTREE_HOME}/\` to .git/info/exclude, then retry. ${rules}`);
+      if (op.create) {
+        const target = op.create.replace(/^refs\/heads\//, '');
+        return isTaskBranch(target) ? openTaskBranch(target, op.start) : misfit(target);
+      }
+      // Without -b: reopen an existing task branch, or git would invent a branch named after the folder.
+      if (isTaskBranch(op.start) && state.probes.branchExists(op.start)) return allow();
+      return refuse(`\`git worktree add\` here takes -b with a feature/<task> or fix/<task> name made off '${BRANCH}' (\`${example}\`), or reopens an existing one of those.`);
+    }
     case 'create': {
       const target = String(op.target ?? '').replace(/^refs\/heads\//, '');
       if (shared) {
         if (target === BRANCH) return allow(BRANCH);
         if (target.startsWith('wip/')) return ask(`branch-guard: '${target}' — a wip/ branch exists only to park commits after a merge conflict the user cannot resolve. Approve only if that is what is happening. ${rules}`, target);
-        return soften(state, 'taskBranches', deny(`branch-guard: '${BRANCH}' is the only working branch in this project. Creating '${target}' is not allowed; commit on ${BRANCH} instead. ${rules}`), target);
+        if (!isTaskBranch(target)) return misfit(target);
+        if (op.inPlace) return soften(state, 'taskBranches', deny(`branch-guard: '${target}' gets its own folder, so this checkout stays on '${state.current ?? BRANCH}'. Open it with \`${openCommand(target)}\`, then move the session there (EnterWorktree with that path). ${rules}`), target);
+        return openTaskBranch(target, op.start);
       }
       if (target === BRANCH) return ask(`branch-guard: creating '${BRANCH}' switches this project to the shared dev → main flow. Only for a live, multi-person project with the user's explicit go-ahead. ${rules}`, BRANCH);
       return soften(state, 'taskBranches', deny(`branch-guard: this project works directly on '${state.trunk}'. Creating '${target}' is not allowed; no task branches, no worktrees. Do the work on ${state.trunk}. ${rules}`), target);
@@ -300,20 +367,22 @@ export function decide(op, state) {
       if (state.probes.branchExists(target)) return switchTo(target, state, shared, rules);
       if (op.maybePath && state.probes.pathExists(target)) return allow();
       if (state.probes.isCommit(target)) return decide({ kind: 'detach' }, state);
-      return decide({ kind: 'create', target: target.replace(/^origin\//, '') }, state);
+      return decide({ kind: 'create', target: target.replace(/^origin\//, ''), inPlace: true }, state);
     }
     case 'detach':
       return shared ? ask(`branch-guard: checking out a commit leaves '${BRANCH}' for a detached HEAD. Needs the user's say-so. ${rules}`, null) : allow(null);
     case 'commit': {
       if (!shared) return allow();
       const cur = state.current;
-      if (cur === BRANCH || (cur && cur.startsWith('wip/'))) return allow();
+      if (cur === BRANCH || (cur && cur.startsWith('wip/')) || isTaskBranch(cur)) return allow();
       const where = cur ? `'${cur}'` : 'a detached HEAD';
       if (state.mergeInProgress) return ask(`branch-guard: a merge is in progress on ${where}; finishing it commits there. Approve only as part of a release the user asked for. ${rules}`);
-      return deny(`branch-guard: commits go on '${BRANCH}', never on ${where}. Switch back to ${BRANCH} and commit there. ${rules}`);
+      return deny(`branch-guard: commits go on '${BRANCH}' (or on a feature/ or fix/ branch in its own folder), never on ${where}. Switch back to ${BRANCH} and commit there. ${rules}`);
     }
     case 'merge':
       if (!shared || state.current === BRANCH) return allow();
+      // Bringing dev into a task branch is how its conflicts get settled before it merges back.
+      if (isTaskBranch(state.current) && op.sources?.length && op.sources.every(s => DEV_REFS.has(s))) return allow();
       return ask(`branch-guard: merging into '${state.current ?? 'a detached HEAD'}' publishes work outside '${BRANCH}'.${state.current === state.trunk ? ' On the production branch that is a release.' : ''} Approve only if the user asked for it. ${rules}`);
     case 'rebase':
       return shared ? ask(`branch-guard: rebasing rewrites history on a shared project. Needs the user's explicit approval. ${rules}`) : allow();
@@ -321,6 +390,8 @@ export function decide(op, state) {
       return shared ? ask(`branch-guard: 'git reset --hard' discards work. Needs the user's explicit approval. ${rules}`) : allow();
     case 'branch-delete':
       if (op.force) return ask(`branch-guard: force-deleting '${op.target ?? 'a branch'}' discards any commits that are not on the working branch. Show the user what it holds and get an explicit yes. ${rules}`);
+      // Plain -d refuses a branch that is not merged, so tidying a merged task branch is safe.
+      if (shared && isTaskBranch(op.target)) return allow();
       return shared ? ask(`branch-guard: deleting branches needs the user's explicit approval. ${rules}`) : allow();
     case 'branch-rename':
       return shared ? ask(`branch-guard: renaming branches needs the user's explicit approval. ${rules}`) : allow();
@@ -359,7 +430,10 @@ function switchTo(target, state, shared, rules) {
   if (target === state.trunk) {
     return { decision: 'ask', current: target, reason: `branch-guard: switching to '${state.trunk}' leaves the working branch '${BRANCH}'. That is a release step (merge ${BRANCH} → ${state.trunk}). Approve only if the user asked for a release. ${rules}` };
   }
-  return { decision: 'ask', current: target, reason: `branch-guard: '${BRANCH}' is the only working branch here. Switching to '${target}' needs the user's say-so. ${rules}` };
+  if (isTaskBranch(target)) {
+    return soften(state, 'taskBranches', { decision: 'deny', current: state.current, reason: `branch-guard: '${target}' lives in its own folder; this checkout stays where it is. If its folder is gone, reopen it with \`${openCommand(target, false)}\`, then EnterWorktree with that path. ${rules}` }, target);
+  }
+  return { decision: 'ask', current: target, reason: `branch-guard: '${BRANCH}' is the working branch here. Switching to '${target}' needs the user's say-so. ${rules}` };
 }
 
 const RANK = { allow: 0, ask: 1, deny: 2 };

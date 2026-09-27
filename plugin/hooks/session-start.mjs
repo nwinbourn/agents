@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectMemory } from './lib/project-memory.mjs';
-import { inspectProject } from './lib/project-inspection.mjs';
+import { inspectProject, runGit } from './lib/project-inspection.mjs';
+import { isTaskBranch } from './lib/branch-policy.mjs';
 import { verifyWrapUp } from './lib/wrap-up-verifier.mjs';
 import { branchInventory, describeInventory } from './lib/branch-inventory.mjs';
 import { memorySizes, describeMemorySize } from './lib/memory-hygiene.mjs';
@@ -25,7 +26,13 @@ const HANDOFF_ISSUES = {
 // What the previous session actually left behind, read from git, not from prose.
 function handoffLine(cwd) {
   try {
-    if (!inspectProject(cwd).isGit) return '';
+    const project = inspectProject(cwd);
+    if (!project.isGit) return '';
+    // A branch session hands off by merging back into dev at wrap-up; git-sync says so.
+    if (project.workflow === 'shared-dev') {
+      const head = runGit(project.root, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
+      if (head.ok && isTaskBranch(head.output.trim())) return '';
+    }
     const report = verifyWrapUp({ project: cwd, remote: 'tracking' });
     const issues = report.checks.filter(c => c.status !== 'passed')
       .map(c => (HANDOFF_ISSUES[c.id] ?? c.id) + (c.status === 'unknown' ? ' (could not be checked)' : ''));

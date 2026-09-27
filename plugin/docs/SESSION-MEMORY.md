@@ -71,10 +71,13 @@ not Claude Code's syntax and loads nothing, so the loader does not treat it as a
 ## Leftover branches
 
 On a Git project, startup also adds a `[branches]` line when anything exists besides the
-working branch and main: local branches (merged, or how many commits are not on the
-working branch, and whether STATE.md names it), leftover worktrees (clean or dirty,
-merged or not), and remote branches other than main and dev. It repeats every session
-until the repository is down to its working branch. "Clean up the branches" resolves
+working branch and main. On a dev project it first lists open `feature/` and `fix/`
+branches in their own folders — parallel work, each merged back at its own wrap-up, with
+how many commits are not yet on dev. Everything else is a leftover: local branches
+(merged, or how many commits are not on the working branch, and whether STATE.md names
+it), leftover worktrees (clean or dirty, merged or not), and remote branches other than
+main and dev. It repeats every session until the repository is down to its working branch
+and open task branches. "Clean up the branches" resolves
 them, and nothing is deleted without the user's yes. The inventory is read-only; the same
 code backs the verifier's `branches` check and the `branch-inventory.mjs` command.
 

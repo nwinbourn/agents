@@ -8,6 +8,11 @@ Bring the repository back to one working branch (`dev` on a shared project, `mai
 otherwise) without losing anything. Every deletion is a question first. The branch guard
 prompts for the risky ones anyway; this skill asks before that, in plain words.
 
+**Open task branches are not leftovers.** On a `dev` project, a `feature/…` or `fix/…`
+branch checked out in its own folder under `.claude/worktrees/` is another session's
+parallel work; that session's wrap-up merges it back. The inventory lists them apart as
+open. Leave them and their folders alone unless the user says that work is abandoned.
+
 ## 1. Take the inventory
 
 Run the plugin's command, resolving its root from this skill's location:
@@ -70,7 +75,8 @@ remote session.
 
 Run the inventory again. Report in plain words: what was deleted, what was merged, what
 is kept and now named in STATE.md, and what remains and why. The goal state is one line:
-"Local branches: dev and main. No worktrees. Nothing stray on origin." If STATE.md
+"Local branches: dev and main. No worktrees. Nothing stray on origin." — plus any open
+task branches in their folders, which stay. If STATE.md
 changed, that edit is part of this session's wrap-up like any other.
 
 ## Never

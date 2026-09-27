@@ -35,6 +35,7 @@ function hook(cwd, toolName, toolInput) {
   return out.trim() ? JSON.parse(out).hookSpecificOutput : null;
 }
 const sh = (cwd, command, tool = 'Bash') => hook(cwd, tool, { command });
+const ignoreWorktrees = dir => writeFileSync(join(dir, '.git', 'info', 'exclude'), '.claude/worktrees/\n');
 const decision = r => r?.permissionDecision ?? 'allow';
 const reason = r => r?.permissionDecisionReason ?? '';
 const snapshot = dir => ({ branch: git(dir, 'branch', '--show-current'), branches: git(dir, 'branch', '--list'), head: git(dir, 'rev-parse', 'HEAD'), status: git(dir, 'status', '--porcelain') });
@@ -56,6 +57,10 @@ try {
       assert.equal(decision(sh(dir, c)), 'deny', c);
     }
     assert.match(reason(sh(dir, 'git checkout -b feature')), /works directly on 'main'/);
+    ignoreWorktrees(dir);
+    for (const c of ['git switch -c feature/mobile-nav', 'git branch fix/footer', 'git worktree add .claude/worktrees/x -b feature/x main']) {
+      assert.equal(decision(sh(dir, c)), 'deny', c); // task branches are a dev-project thing only
+    }
     assert.equal(decision(sh(dir, 'git checkout -b dev')), 'ask');
     assert.equal(decision(sh(dir, 'git switch -c dev')), 'ask');
     for (const c of ['git commit -m x', 'git push origin main', 'git merge other', 'git rebase main', 'git reset --hard', 'git branch -d feature',
@@ -81,14 +86,71 @@ try {
       assert.equal(sh(dir, c), null, c);
     }
   });
-  await test('shared workflow: creating anything but dev is denied, wip/ asks', () => {
+  await test('shared workflow: names other than dev, wip/ and feature/ or fix/ are denied, wip/ asks', () => {
     const dir = shared();
-    for (const c of ['git checkout -b feature', 'git switch -c feature', 'git branch feature', 'git worktree add ../tree', 'git checkout feature', 'git switch feature']) {
+    for (const c of ['git checkout -b feature', 'git switch -c feature', 'git branch feature', 'git worktree add ../tree', 'git checkout feature', 'git switch feature',
+      'git branch claude/unhidden-work-page-867d9f', 'git branch feat/mobile-nav', 'git branch feature/', 'git branch Feature/Mobile_Nav']) {
       assert.equal(decision(sh(dir, c)), 'deny', c);
     }
-    assert.match(reason(sh(dir, 'git switch -c feature')), /'dev' is the only working branch/);
+    assert.match(reason(sh(dir, 'git switch -c feature')), /not a branch this project uses/);
     assert.equal(decision(sh(dir, 'git switch -c wip/noah-conflict')), 'ask');
     assert.equal(decision(sh(dir, 'git push origin wip/noah-conflict')), 'ask');
+  });
+  await test('shared workflow: a feature/ or fix/ branch opens off dev in its own folder, with the user\'s approval', () => {
+    const dir = shared(); ignoreWorktrees(dir);
+    for (const c of ['git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev',
+      'git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav origin/dev',
+      'git worktree add -b fix/footer-links .claude/worktrees/footer-links',
+      'git branch feature/mobile-nav', 'git branch feature/mobile-nav dev']) {
+      assert.equal(decision(sh(dir, c)), 'ask', c);
+    }
+    assert.equal(decision(sh(dir, 'git worktree add .claude\\worktrees\\footer-links -b fix/footer-links dev', 'PowerShell')), 'ask');
+    assert.match(reason(sh(dir, 'git branch feature/mobile-nav')), /open a new branch 'feature\/mobile-nav' off 'dev'/);
+    for (const c of ['git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav main', 'git branch feature/mobile-nav main',
+      'git switch -c feature/mobile-nav', 'git checkout -b fix/footer-links', 'git stash branch fix/footer-links',
+      'git worktree add ../mobile-nav -b feature/mobile-nav dev', 'git worktree add .claude/worktrees/x --detach',
+      'git worktree add .claude/worktrees/mobile-nav', 'git worktree add .claude/worktrees/x -b claude/x-867d9f dev']) {
+      assert.equal(decision(sh(dir, c)), 'deny', c);
+    }
+    assert.match(reason(sh(dir, 'git switch -c feature/mobile-nav')), /gets its own folder/);
+    assert.match(reason(sh(dir, 'git branch feature/mobile-nav main')), /must be made off 'dev'/);
+    assert.match(reason(sh(dir, 'git worktree add ../mobile-nav -b feature/mobile-nav dev')), /live in \.claude\/worktrees/);
+  });
+  await test('shared workflow: a branch folder Git would not ignore is refused until it is excluded', () => {
+    const dir = shared(); const c = 'git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev';
+    assert.equal(decision(sh(dir, c)), 'deny');
+    assert.match(reason(sh(dir, c)), /not ignored by Git/);
+    ignoreWorktrees(dir);
+    assert.equal(decision(sh(dir, c)), 'ask');
+    assert.equal(decision(sh(join(dir, '..'), `git -C "${dir}" worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev`)), 'ask');
+  });
+  await test('shared workflow: inside a task branch folder, work and syncing with dev are silent', () => {
+    const dir = shared(); ignoreWorktrees(dir);
+    const tree = join(dir, '.claude', 'worktrees', 'mobile-nav');
+    git(dir, 'worktree', 'add', tree, '-b', 'feature/mobile-nav', 'dev');
+    for (const c of ['git commit -m x', 'git merge dev', 'git merge origin/dev', 'git merge --no-edit -m "sync" origin/dev', 'git merge --continue',
+      `git -C "${dir}" merge --ff-only feature/mobile-nav`, `git -C "${dir}" push origin dev`,
+      `git -C "${dir}" worktree remove .claude/worktrees/mobile-nav`, `git -C "${dir}" branch -d feature/mobile-nav`]) {
+      assert.equal(sh(tree, c), null, c);
+    }
+    for (const c of ['git merge main', 'git push origin feature/mobile-nav', 'git switch main', `git -C "${dir}" branch -D feature/mobile-nav`]) {
+      assert.equal(decision(sh(tree, c)), 'ask', c);
+    }
+    assert.equal(decision(sh(tree, 'git switch -c feature/other')), 'deny');
+    assert.equal(decision(sh(tree, 'git worktree add .claude/worktrees/other -b feature/other dev')), 'deny'); // would nest inside this folder
+    assert.equal(decision(sh(tree, `git worktree add "${join(dir, '.claude', 'worktrees', 'other')}" -b feature/other dev`)), 'ask');
+    assert.equal(decision(sh(dir, 'git switch feature/mobile-nav')), 'deny');
+    assert.match(reason(sh(dir, 'git checkout feature/mobile-nav')), /lives in its own folder/);
+    git(dir, 'worktree', 'remove', tree);
+    assert.equal(sh(dir, 'git worktree add .claude/worktrees/mobile-nav feature/mobile-nav'), null);
+    assert.match(reason(sh(dir, 'git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev')), /already exists/);
+  });
+  await test('EnterWorktree: entering an existing folder is silent; making one without a name is refused', () => {
+    const dir = shared();
+    assert.equal(hook(dir, 'EnterWorktree', { path: join(dir, '.claude', 'worktrees', 'mobile-nav') }), null);
+    assert.equal(decision(hook(dir, 'EnterWorktree', { name: 'mobile-nav' })), 'deny');
+    assert.match(reason(hook(dir, 'EnterWorktree', {})), /feature\/<task> or fix\/<task> made off 'dev'/);
+    assert.match(reason(hook(dir, 'Agent', { isolation: 'worktree', prompt: 'x' })), /without isolation/);
   });
   await test('shared workflow: a fresh clone on main may create local dev from origin', () => {
     const dir = shared(); const clone = join(folder(), 'clone');
@@ -197,6 +259,8 @@ try {
     assert.match(reason(sh(dir, 'git branch -D feature')), /discards any commits/);
     const team = shared();
     assert.match(reason(sh(team, 'git branch -D feature')), /discards any commits/);
+    assert.equal(sh(team, 'git branch -d feature/mobile-nav'), null); // -d refuses unmerged work on its own
+    assert.equal(decision(sh(team, 'git branch -D feature/mobile-nav')), 'ask');
     assert.equal(decision(sh(team, 'git worktree remove --force ../tree')), 'ask');
     assert.equal(sh(team, 'git worktree remove ../tree'), null);
   });
@@ -213,7 +277,10 @@ try {
     assert.deepEqual(splitCommands("cat <<'EOF'\ngit checkout -b x\nEOF\ngit status"), [['cat'], ['git', 'status']]);
     assert.deepEqual(splitCommands('echo $(git rev-parse HEAD) | tee log > out 2>&1'), [['echo', '$'], ['git', 'rev-parse', 'HEAD'], ['tee', 'log']]);
     assert.deepEqual(splitCommands('git -C C:\\repo status', { powershell: true }), [['git', '-C', 'C:\\repo', 'status']]);
-    assert.deepEqual(analyzeCommand(['git', '-C', '../x', 'switch', '-c', 'feat']), { kind: 'create', target: 'feat', cwd: '../x' });
+    assert.deepEqual(analyzeCommand(['git', '-C', '../x', 'switch', '-c', 'feat']), { kind: 'create', target: 'feat', inPlace: true, cwd: '../x' });
+    assert.deepEqual(analyzeCommand(['git', 'worktree', 'add', '--lock', '--reason', 'x y', '.claude/worktrees/a', '-b', 'feature/a', 'dev']),
+      { kind: 'worktree', path: '.claude/worktrees/a', start: 'dev', create: 'feature/a', detach: false, orphan: false });
+    assert.deepEqual(analyzeCommand(['git', 'merge', '--no-ff', '-m', 'msg', 'origin/dev']), { kind: 'merge', sources: ['origin/dev'] });
     assert.deepEqual(analyzeCommand(['git', 'push', 'origin', 'dev:main']), { kind: 'push', force: false, remove: false, all: false, targets: ['main'], usesCurrent: false });
     assert.equal(analyzeCommand(['npm', 'test']), null);
     assert.equal(analyzeCommand(['git', 'branch', '--list']), null);

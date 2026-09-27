@@ -18,6 +18,7 @@
 // safe to run globally. Any unexpected error exits 0 — never break session start.
 
 import { inspectProject, runGit } from './lib/project-inspection.mjs';
+import { isTaskBranch, WORKTREE_HOME } from './lib/branch-policy.mjs';
 import { readFileSync } from 'node:fs';
 
 let raw = '';
@@ -81,6 +82,12 @@ if (branch === BRANCH) {
   } else {
     lines.push(`${BRANCH} is in sync with origin/${BRANCH}.${dirty ? ' Working tree has uncommitted changes from a previous session — check STATE.md "Mid-flight".' : ''}`);
   }
+} else if (isTaskBranch(branch)) {
+  // A branch session: its own folder, made off dev, merged back at wrap-up.
+  lines.push(`On branch '${branch}', in its own folder, made off '${BRANCH}'. Work and commit here; /wrap-up brings ${BRANCH} in, merges this branch back into ${BRANCH} and removes the folder.`);
+  const devAhead = count(`HEAD..origin/${BRANCH}`);
+  if (devAhead) lines.push(`(origin/${BRANCH} has ${devAhead} commit(s) this branch does not have yet; wrap-up merges them in first.)`);
+  if (dirty) lines.push('This folder has uncommitted changes — check STATE.md "Mid-flight" before building on them.');
 } else {
   const local = tryGit(['rev-parse', '--verify', '--quiet', `refs/heads/${BRANCH}`]);
   const where = branch ? `On branch '${branch}'` : 'In detached HEAD state';
@@ -94,7 +101,9 @@ if (branch === BRANCH) {
   lines.push('Tell the user where they are. Do NOT switch branches without their say-so — they may be here deliberately.');
 }
 
-lines.push(`Convention here: '${BRANCH}' is the shared working branch — commit there, never directly to main; dev→main merges are deliberate maintainer actions. Full rules in AGENTS.md. At session end, /wrap-up must leave ${BRANCH} committed and pushed.`);
+lines.push(isTaskBranch(branch)
+  ? `Convention here: '${BRANCH}' is the working branch and main is live; this branch merges back into ${BRANCH} at /wrap-up, never into main. Full rules in AGENTS.md → Git flow.`
+  : `Convention here: '${BRANCH}' is the shared working branch — commit there, never directly to main; dev→main merges are deliberate maintainer actions. Before the first change, ask the user: straight on ${BRANCH}, or a branch off ${BRANCH}? One thing at a time goes straight on ${BRANCH}; parallel work gets a feature/<task> or fix/<task> branch in its own folder (\`git worktree add ${WORKTREE_HOME}/<task> -b feature/<task> ${BRANCH}\`, then EnterWorktree with that path), which /wrap-up merges back. Full rules in AGENTS.md → Git flow. At session end, /wrap-up must leave ${BRANCH} committed and pushed.`);
 
 process.stdout.write(JSON.stringify({
   hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `[git-sync] ${lines.join('\n')}` },

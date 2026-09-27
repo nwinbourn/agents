@@ -12,7 +12,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
+import { mainProjectRoot, findMemoryFile } from './lib/project-inspection.mjs';
 import { MEMORY_FILES, countLines } from './lib/memory-hygiene.mjs';
 import crypto from 'node:crypto';
 
@@ -27,7 +27,9 @@ if (data.tool_name !== 'Skill') process.exit(0);
 const skillName = String(data.tool_input?.skill ?? '');
 if (!/(^|:)wrap-up$/.test(skillName)) process.exit(0); // matches 'wrap-up' and plugin-namespaced 'agents:wrap-up'
 
-const projectDir = resolveProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()).root;
+// Keyed to the project folder, so a branch session armed in its own folder is still
+// checked after wrap-up merges it back and returns to the project folder.
+const projectDir = mainProjectRoot(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd());
 const markerDir = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.claude', 'hooks', '.wrapup-armed');
 const key = crypto.createHash('sha1').update(projectDir).digest('hex').slice(0, 16);
 const markerPath = path.join(markerDir, `${key}.json`);

@@ -168,6 +168,16 @@ try {
     write(tree,'app.txt','worktree work\n');git(tree,'add','.');git(tree,'commit','-m','In the worktree');
     const r=verify(dir);assert.equal(check(r,'branches').status,'incomplete');assert.match(check(r,'branches').message,/worktree at .* has 1 commit not on main/);
   });
+  test('an open feature/ branch in its own folder is parallel work: reported, never failing another session',()=>{
+    const {dir}=shared();writeFileSync(join(dir,'.git','info','exclude'),'.claude/worktrees/\n');
+    const tree=join(dir,'.claude','worktrees','mobile-nav');git(dir,'worktree','add',tree,'-b','feature/mobile-nav','dev');
+    write(tree,'app.txt','branch work\n');save(tree);
+    const r=verify(dir);const b=check(r,'branches');assert.equal(r.status,'passed');assert.equal(b.status,'passed');
+    assert.deepEqual(b.open,['feature/mobile-nav']);assert.match(b.message,/merge back at their own wrap-up: feature\/mobile-nav/);
+    assert.equal(check(verify(tree),'branch').status,'incomplete'); // the branch session itself is done only once it is back on dev
+    git(dir,'worktree','remove',tree); // without its folder it is a parked branch that STATE.md has to name
+    const parked=check(verify(dir),'branches');assert.equal(parked.status,'incomplete');assert.match(parked.message,/'feature\/mobile-nav' has 1 commit not on dev/);
+  });
   console.log(`${passed} wrap-up verifier checks passed`);
 } finally {
   // The only deletion target is this run's freshly allocated absolute temp root.

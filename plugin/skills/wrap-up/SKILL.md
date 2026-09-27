@@ -1,6 +1,6 @@
 ---
 name: wrap-up
-description: End-of-session handoff. Updates the project's STATE.md, graduates settled decisions to CONTEXT.md and repeating traps to PITFALLS.md, writes the "Start here" pointer, and — on shared projects — leaves the dev branch committed and pushed so collaborators (and their agents) receive the session's work and memory. Use when the user says wrap up, we're done, end the session, save this, or asks where to pick up next time — and before /clear or a context switch to unrelated work. Also use when a task finishes and the project docs no longer match reality.
+description: End-of-session handoff. Updates the project's STATE.md, graduates settled decisions to CONTEXT.md and repeating traps to PITFALLS.md, writes the "Start here" pointer, and — on shared projects — merges a feature/ or fix/ branch session back into dev and leaves dev committed and pushed so collaborators (and their agents) receive the session's work and memory. Use when the user says wrap up, we're done, end the session, save this, or asks where to pick up next time — and before /clear or a context switch to unrelated work. Also use when a task finishes and the project docs no longer match reality.
 user-invocable: true
 argument-hint: "[optional: what to focus on]"
 ---
@@ -20,6 +20,22 @@ on a phase, or as a plain fact in `CONTEXT.md`. Never as a log line, never with 
 attached, never under a `Done ✅` heading.
 
 ## Procedure
+
+### 0. On a `feature/` or `fix/` branch? Decide now whether it merges
+
+Check `git branch --show-current`. On a `dev` project, a `feature/…` or `fix/…` branch
+means this session worked in its own folder under `.claude/worktrees/`, and it ends by
+merging back into `dev` (step 7). Decide first, because it changes where the memory
+edits go:
+
+- **Run the project's build** (its tests if there is no build; skip if it has neither).
+  If it passes, the branch merges. Unfinished work is fine: `dev` is not live. Do steps
+  1–6 here in the branch folder; the memory edits travel with the merge.
+- **If it fails, stop and ask:** merge anyway, or keep the branch open? Keep it open
+  also whenever the user says so. For a kept branch, commit its work on the branch,
+  `ExitWorktree` with `keep`, then do steps 1–6 in the project folder on `dev`, with
+  Mid-flight naming the branch (what it holds, what is left). Leave the memory files on
+  the branch untouched so its later merge stays clean.
 
 ### 1. Find what actually changed — don't work from memory
 
@@ -105,10 +121,13 @@ to lose between sessions. Before moving on:
 - **Nothing about the workers themselves.** No agent ids, no token counts, no "spawned 6
   workers" — that's what happened, not where things stand. Record only the state of the
   work.
-- **A branch or worktree other than the working branch is unintegrated work.** Session
-  start lists them; any with commits not on the working branch must be named here (what
-  it holds, who decides) until it is merged or deleted, or the verifier's `branches`
-  check stays incomplete. Merged leftovers are clutter: say "clean up the branches".
+- **A branch or worktree other than the working branch is unintegrated work** — except
+  an open `feature/` or `fix/` branch in its own folder on a `dev` project, which is
+  another session's parallel work and merges back at that session's wrap-up. Session
+  start lists them all; any other branch with commits not on the working branch must be
+  named here (what it holds, who decides) until it is merged or deleted, or the
+  verifier's `branches` check stays incomplete. Merged leftovers are clutter: say
+  "clean up the branches".
 
 ### 5. Save durable preferences to memory
 
@@ -173,7 +192,27 @@ even if publication is not requested.
 
 **`origin/dev` exists** → `dev` must end the session committed and pushed, because
 unpushed work (including the memory updates from steps 3–6) is invisible to every other
-person and their agents:
+person and their agents.
+
+**A branch session that merges (step 0) comes home first.** This is the agreed flow, so
+run it without asking; only the push further down waits for the user:
+
+- **Commit on the branch** — show what changed in plain words, exclude anything the
+  user was editing themselves, commit.
+- **Bring `dev` in** — `git fetch origin dev`, then `git merge origin/dev` on the branch
+  (plus `git merge dev` if local `dev` holds commits origin lacks). Resolve conflicts
+  here in the branch folder, never in the project folder. Memory files are prose: merge
+  both truths and keep every open item from both sides.
+- **Move `dev` forward** — `git -C "<project folder>" merge --ff-only <branch>`. If it
+  refuses because `dev` moved again, bring `dev` in once more and retry. If it refuses
+  because the project folder has uncommitted changes to the same files (someone working
+  straight on `dev`), stop and tell the user.
+- **Close the folder** — `ExitWorktree` with `keep`, then in the project folder
+  `git worktree remove .claude/worktrees/<task>` and `git branch -d <branch>`. The
+  session is now in the project folder on `dev`; carry on with the steps below.
+
+**A kept branch** (step 0) stays open with its folder and commits as they are; the steps
+below commit and push only the memory files, from the project folder.
 
 1. **Commit** — confirm you are on `dev` (if not: stop and ask; never switch branches
    silently). Show what changed in plain words, confirm the scope with the user, exclude
@@ -198,6 +237,9 @@ resolving its root from this skill's location:
 ```sh
 node "<plugin-root>/hooks/wrap-up-verify.mjs" --project "<project-directory>" --check-remote
 ```
+
+For a branch session, `<project-directory>` is the project folder, checked after the
+merge back; the branch folder itself never passes, because it is not on `dev`.
 
 This explicit command reports JSON with `passed`, `incomplete` or `unknown` for
 each check. Exit codes are 0, 1 and 2 respectively; a nonzero result is evidence to

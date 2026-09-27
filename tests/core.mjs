@@ -92,6 +92,11 @@ try {
     const dir = folder(); write(dir, 'STATE.md', 'line\n'.repeat(710));
     arm(dir); assert.equal(bloat(dir).decision, 'block'); assert.equal(bloat(dir), null);
   });
+  check('wrap-up: a branch session armed in its own folder is checked back in the project folder', () => {
+    const dir = repository(); write(dir, 'STATE.md', 'line\n'.repeat(710)); git(dir, 'add', '.'); git(dir, 'commit', '-m', 'Long state');
+    const tree = join(dir, '.claude', 'worktrees', 'mobile-nav'); git(dir, 'worktree', 'add', tree, '-b', 'feature/mobile-nav');
+    arm(tree); assert.equal(bloat(dir).decision, 'block'); assert.equal(bloat(dir), null);
+  });
   check('wrap-up: lean state with a usable handoff passes after invocation', () => {
     const dir = folder(); write(dir, 'STATE.md', handoff + '\n## What\'s next\n\n1. inspect app.\n');
     arm(dir); assert.equal(bloat(dir), null);
@@ -191,6 +196,16 @@ try {
     assert.equal(git(client, 'branch', '--show-current'), 'main');
     assert.equal(git(client, 'rev-parse', 'HEAD'), before);
     assert.match(context(r), /not the shared working branch/);
+  });
+  check('git: on dev the agent asks straight-on-dev or a branch; a branch session is told it merges back', () => {
+    const { client } = shared();
+    assert.match(context(hook('git-sync.mjs', client)), /Before the first change, ask the user: straight on dev, or a branch off dev\?/);
+    writeFileSync(join(client, '.git', 'info', 'exclude'), '.claude/worktrees/\n');
+    const tree = join(client, '.claude', 'worktrees', 'mobile-nav'); git(client, 'worktree', 'add', tree, '-b', 'feature/mobile-nav', 'dev');
+    const r = context(hook('git-sync.mjs', tree));
+    assert.match(r, /On branch 'feature\/mobile-nav', in its own folder, made off 'dev'/);
+    assert(!/Do NOT switch branches/.test(r) && !/Before the first change/.test(r));
+    assert.equal(git(tree, 'branch', '--show-current'), 'feature/mobile-nav');
   });
   check('git: unpushed local work is reported but not pushed', () => {
     const { writer, client } = shared(); const before = git(writer, 'rev-parse', 'origin/dev');

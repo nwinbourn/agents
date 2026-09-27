@@ -42,10 +42,12 @@ At session start, the sync hook fetches and fast-forwards a clean, strictly-behi
 hook preserves local work and never switches branches automatically.
 
 While the agent works, a branch guard enforces the flow at the command line. In any
-project with memory files it refuses task branches and worktrees, the usual source of
-a repo full of stray branches. Where `origin/dev` exists it also refuses commits off
-`dev`, and anything that touches `main` (switching to it, merging into it, pushing it)
-becomes a permission prompt, because that is a release. Refusals go to the model with
+project with memory files it refuses stray branches and worktrees, the usual source of
+a repo full of half-merged work. Where `origin/dev` exists, parallel work gets a
+`feature/<task>` or `fix/<task>` branch made off `dev` in its own folder (opening one is
+a permission prompt), and wrap-up merges it back into `dev`. Commits stay on `dev` or
+that branch, and anything that touches `main` (switching to it, merging into it, pushing
+it) becomes a permission prompt, because that is a release. Refusals go to the model with
 the reason; you only see the release prompts. For the rare genuine hotfix that must land
 on `main` while `dev` holds unfinished work, `/override` relaxes that one project's
 refusals into approve-prompts for a single, self-clearing window.
@@ -91,8 +93,9 @@ The checks run whether or not the agent remembers to run them:
 - **At the next session start**, the verifier runs again against the synced checkout
   and the agent opens with one line: the previous handoff passed, or it left
   uncommitted work, an unfinished merge, unpushed commits, a stray branch with
-  unrecorded commits, or no usable Start here block. Two more lines list leftover
-  branches and worktrees, and the size of the memory files with what is over guidance.
+  unrecorded commits, or no usable Start here block. Two more lines list open task
+  branches and leftover branches and worktrees, and the size of the memory files with
+  what is over guidance.
 - **On every turn**, a stop hook notices when project files changed but STATE.md did not.
 
 These checks are mechanical: they prove the handoff's shape and the repository's

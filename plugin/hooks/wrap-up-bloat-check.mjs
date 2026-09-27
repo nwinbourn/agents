@@ -22,7 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { resolveProject, findMemoryFile } from './lib/project-inspection.mjs';
+import { mainProjectRoot, findMemoryFile } from './lib/project-inspection.mjs';
 import { checkHandoff } from './lib/wrap-up-verifier.mjs';
 import { GUIDANCE, START_HERE_LINES, PITFALL_ENTRY_LINES, MEMORY_FILES, countLines, pitfallShape } from './lib/memory-hygiene.mjs';
 
@@ -36,7 +36,7 @@ if (!data || typeof data !== 'object' || Array.isArray(data) ||
 // Already reminded this stop cycle — let Claude stop.
 if (data.stop_hook_active) process.exit(0);
 
-const projectDir = resolveProject(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()).root;
+const projectDir = mainProjectRoot(data.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd());
 const markerDir = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.claude', 'hooks', '.wrapup-armed');
 const key = crypto.createHash('sha1').update(projectDir).digest('hex').slice(0, 16);
 const markerPath = path.join(markerDir, `${key}.json`);

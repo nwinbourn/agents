@@ -67,12 +67,15 @@ That's the whole adoption. A recorded `origin/dev` enables sync. STATE or CONTEX
 enables startup memory loading; STATE enables the staleness reminder. Shared dev
 projects also get notices when required memory is missing. Other projects stay silent.
 
-Memory files also turn on the branch guard: Claude cannot create task branches or
-worktrees in the project. With `origin/dev` it also cannot commit off `dev`, and
-anything that touches `main` (switching to it, merging into it, pushing it) asks you
-first, because that is a release. Creating `dev` itself always asks. A team that works
-with feature branches or worktree agents can soften the refusals to prompts in
-`~/.claude/branch-guard.json`. Details and limits: [branch guard](BRANCH-GUARD.md).
+Memory files also turn on the branch guard: Claude cannot create stray branches or
+worktrees in the project. With `origin/dev`, Claude asks at the start whether to work
+straight on `dev` or on a branch. A branch is `feature/<task>` or `fix/<task>`, made off
+`dev` in its own folder, and opening one asks you first; wrap-up merges it back into
+`dev`. Commits stay on `dev` or that branch, and anything that touches `main` (switching
+to it, merging into it, pushing it) asks you first, because that is a release. Creating
+`dev` itself always asks. A team that wants looser rules can soften the refusals to
+prompts in `~/.claude/branch-guard.json`. Details and limits:
+[branch guard](BRANCH-GUARD.md).
 
 ## Optional: the agent harness
 

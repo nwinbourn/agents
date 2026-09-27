@@ -1,7 +1,7 @@
 // Shared project discovery. Never walks into unrelated ancestor memory directories.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname, basename } from 'node:path';
 
 export function runGit(cwd, args, timeout = 5000) {
   try {
@@ -20,6 +20,17 @@ export function resolveProject(cwd = process.cwd()) {
   const requested = resolve(cwd);
   const top = runGit(requested, ['rev-parse', '--show-toplevel']);
   return { root: top.ok ? resolve(top.output.trim()) : requested, isGit: top.ok };
+}
+
+// The main checkout's root. A linked worktree (a branch in its own folder) resolves to
+// the project folder it was made from; anything unusual falls back to its own root.
+export function mainProjectRoot(cwd = process.cwd()) {
+  const project = resolveProject(cwd);
+  if (!project.isGit) return project.root;
+  const common = runGit(project.root, ['rev-parse', '--git-common-dir']);
+  if (!common.ok) return project.root;
+  const dir = resolve(project.root, common.output.trim());
+  return basename(dir) === '.git' ? dirname(dir) : project.root;
 }
 
 export function findMemoryFile(root, name) {
