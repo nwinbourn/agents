@@ -1,6 +1,6 @@
 ---
 name: wrap-up
-description: End-of-session handoff. Updates the project's STATE.md, graduates settled decisions to CONTEXT.md and repeating traps to PITFALLS.md, writes the "Start here" pointer, and — on shared projects — merges a feature/ or fix/ branch session back into dev and leaves dev committed and pushed so collaborators (and their agents) receive the session's work and memory. Use when the user says wrap up, we're done, end the session, save this, or asks where to pick up next time — and before /clear or a context switch to unrelated work. Also use when a task finishes and the project docs no longer match reality.
+description: End-of-session handoff. Updates the project's STATE.md, graduates settled decisions to CONTEXT.md and repeating traps to PITFALLS.md, writes the "Start here" pointer, and — on shared projects — merges a branch session back into dev and leaves dev committed and pushed so collaborators (and their agents) receive the session's work and memory. Use when the user says wrap up, we're done, end the session, save this, or asks where to pick up next time — and before /clear or a context switch to unrelated work. Also use when a task finishes and the project docs no longer match reality.
 user-invocable: true
 argument-hint: "[optional: what to focus on]"
 ---
@@ -21,12 +21,14 @@ attached, never under a `Done ✅` heading.
 
 ## Procedure
 
-### 0. On a `feature/` or `fix/` branch? Decide now whether it merges
+### 0. On a branch? Decide now whether it merges
 
-Check `git branch --show-current`. On a `dev` project, a `feature/…` or `fix/…` branch
-means this session worked in its own folder under `.claude/worktrees/`, and it ends by
-merging back into `dev` (step 7). Decide first, because it changes where the memory
-edits go:
+Check `git branch --show-current`. On a `dev` project, a `<kind>/<name>` branch
+(`design/pricing-page`, `fix/mobile-menu`) means this session worked in its own folder
+under `.claude/worktrees/`, and it ends by merging back into `dev` (step 7). Read what it
+was opened for — `git config branch.<branch>.description` — and judge the session
+against that task, not against whatever it drifted into. Decide first, because it
+changes where the memory edits go:
 
 - **Run the project's build** (its tests if there is no build; skip if it has neither).
   If it passes, the branch merges. Unfinished work is fine: `dev` is not live. Do steps
@@ -122,7 +124,7 @@ to lose between sessions. Before moving on:
   workers" — that's what happened, not where things stand. Record only the state of the
   work.
 - **A branch or worktree other than the working branch is unintegrated work** — except
-  an open `feature/` or `fix/` branch in its own folder on a `dev` project, which is
+  an open `<kind>/<name>` branch in its own folder on a `dev` project, which is
   another session's parallel work and merges back at that session's wrap-up. Session
   start lists them all; any other branch with commits not on the working branch must be
   named here (what it holds, who decides) until it is merged or deleted, or the
@@ -203,13 +205,23 @@ run it without asking; only the push further down waits for the user:
   (plus `git merge dev` if local `dev` holds commits origin lacks). Resolve conflicts
   here in the branch folder, never in the project folder. Memory files are prose: merge
   both truths and keep every open item from both sides.
+- **Build again if anything came in** — the build from step 0 (or the tests), now with
+  `dev`'s latest work inside. Two branches can merge without a single conflict and still
+  break together: one renames something the other uses. Fix any break here, on the
+  branch, before `dev` moves.
 - **Move `dev` forward** — `git -C "<project folder>" merge --ff-only <branch>`. If it
   refuses because `dev` moved again, bring `dev` in once more and retry. If it refuses
   because the project folder has uncommitted changes to the same files (someone working
   straight on `dev`), stop and tell the user.
-- **Close the folder** — `ExitWorktree` with `keep`, then in the project folder
-  `git worktree remove .claude/worktrees/<task>` and `git branch -d <branch>`. The
-  session is now in the project folder on `dev`; carry on with the steps below.
+- **Close the folder** — `ExitWorktree` with `keep`. Then, before deleting the folder,
+  remove any links inside it: deleting a folder that holds a linked `node_modules` (a
+  symlink or a Windows junction) can delete what the link points to — the project
+  folder's real `node_modules`. Find them with
+  `find .claude/worktrees/<folder> -maxdepth 3 -type l` and remove each link on its own:
+  `rm <link>`, or on Windows `cmd /c rmdir <link>` (`cmd //c rmdir "<windows path>"`
+  from Git Bash). Never a recursive delete. Then `git worktree remove
+  .claude/worktrees/<folder>` and `git branch -d <branch>`. The session is now in the
+  project folder on `dev`; carry on with the steps below.
 
 **A kept branch** (step 0) stays open with its folder and commits as they are; the steps
 below commit and push only the memory files, from the project folder.

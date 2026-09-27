@@ -4,8 +4,8 @@
 // Enforces the Git flow from AGENTS.md at the command, not in prose. Only in
 // projects that adopted the memory protocol (STATE/CONTEXT, or origin/dev):
 //   - local projects:      no new branches or worktrees (creating `dev` asks)
-//   - origin/dev exists:   work goes on dev, or on a feature/<task> or fix/<task>
-//                          branch made off dev in its own worktree under
+//   - origin/dev exists:   work goes on dev, or on a <kind>/<name> task branch
+//                          (TASK_KINDS) made off dev in its own worktree under
 //                          .claude/worktrees/ (opening one asks); other branch
 //                          names and worktrees are refused; commits stay on dev
 //                          or a task branch; anything touching main asks,
@@ -112,8 +112,8 @@ try {
       let reason = state.workflow !== 'shared-dev'
         ? `branch-guard: this project works on a single branch ('${state.trunk}'); worktrees create stray branches. Run without worktree isolation. Rules: AGENTS.md → Git flow.`
         : tool === 'EnterWorktree'
-          ? `branch-guard: without a path this makes a randomly named branch. Branches here are feature/<task> or fix/<task> made off 'dev': \`git worktree add ${WORKTREE_HOME}/<task> -b feature/<task> dev\` (the user approves it), then EnterWorktree with that path. Rules: AGENTS.md → Git flow.`
-          : `branch-guard: worktree isolation makes a randomly named branch. Run the agent without isolation; branches here are feature/<task> or fix/<task> made off 'dev', opened only when the user chose one. Rules: AGENTS.md → Git flow.`;
+          ? `branch-guard: without a path this makes a randomly named branch. Branches here are <kind>/<name> made off 'dev': \`git worktree add ${WORKTREE_HOME}/<kind>-<name> -b <kind>/<name> dev\` (the user approves it), then EnterWorktree with that path. Rules: AGENTS.md → Git flow.`
+          : `branch-guard: worktree isolation makes a randomly named branch. Run the agent without isolation; branches here are <kind>/<name> made off 'dev', opened only when the user chose one. Rules: AGENTS.md → Git flow.`;
       if (decision === 'deny' && readActiveOverride(state.root)) { decision = 'ask'; reason = `${reason} | ${OVERRIDE_NOTE}`; }
       emit(decision, reason);
     }

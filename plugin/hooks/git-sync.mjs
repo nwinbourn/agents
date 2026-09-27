@@ -103,7 +103,7 @@ if (branch === BRANCH) {
 
 lines.push(isTaskBranch(branch)
   ? `Convention here: '${BRANCH}' is the working branch and main is live; this branch merges back into ${BRANCH} at /wrap-up, never into main. Full rules in AGENTS.md → Git flow.`
-  : `Convention here: '${BRANCH}' is the shared working branch — commit there, never directly to main; dev→main merges are deliberate maintainer actions. Before the first change, ask the user: straight on ${BRANCH}, or a branch off ${BRANCH}? One thing at a time goes straight on ${BRANCH}; parallel work gets a feature/<task> or fix/<task> branch in its own folder (\`git worktree add ${WORKTREE_HOME}/<task> -b feature/<task> ${BRANCH}\`, then EnterWorktree with that path), which /wrap-up merges back. Full rules in AGENTS.md → Git flow. At session end, /wrap-up must leave ${BRANCH} committed and pushed.`);
+  : `Convention here: '${BRANCH}' is the shared working branch — commit there, never directly to main; dev→main merges are deliberate maintainer actions. Before the first change, run the initiate skill if it is available: it briefs the user, checks the task against branches already open and settles straight on ${BRANCH} or a branch. Without it, ask the user: straight on ${BRANCH}, or a branch off ${BRANCH}? One thing at a time goes straight on ${BRANCH}; parallel work gets a <kind>/<name> branch in its own folder (\`git worktree add ${WORKTREE_HOME}/<kind>-<name> -b <kind>/<name> ${BRANCH}\`, then EnterWorktree with that path), which /wrap-up merges back. Full rules in AGENTS.md → Git flow. At session end, /wrap-up must leave ${BRANCH} committed and pushed.`);
 
 process.stdout.write(JSON.stringify({
   hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `[git-sync] ${lines.join('\n')}` },

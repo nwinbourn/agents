@@ -106,7 +106,7 @@ export function verifyWrapUp({ project = process.cwd(), checkRemote = false, rem
 
     // A branch or worktree with commits not on the working branch is unintegrated work;
     // STATE.md has to name it. Merged leftovers are clutter, reported but not failing.
-    // Open feature/ and fix/ branches in their own folders belong to parallel sessions
+    // Open task branches in their own folders belong to parallel sessions
     // that merge them back at their own wrap-up: reported, never failing this one.
     const inventory = branchInventory(root, scope);
     const commits = n => `${n} commit${n === 1 ? '' : 's'} not on ${inventory.working}`;

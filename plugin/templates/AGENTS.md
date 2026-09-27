@@ -84,20 +84,20 @@ main   ─────────────────────●──�
                            │                     │
 dev    ──●──●─────●──●─────●──●──●──────●──●─────●────    the working branch
               ╲      ↗           ╲        ↗
-         feature/mobile-nav    fix/footer-links           parallel work, each in its own
+        design/pricing-page    fix/footer-links           parallel work, each in its own
                                                           folder, merged back at wrap-up
 ```
 
 **Without `dev`: one working branch, no task branches.** Nobody creates a feature branch
 or a worktree for a task — the work goes on `main`. A repo full of half-merged task
 branches is the mess this rule exists to prevent. On a `dev` project, parallel work gets
-short-lived `feature/` and `fix/` branches instead (below). In Claude Code the plugin's
+short-lived `<kind>/<name>` branches instead (below). In Claude Code the plugin's
 branch guard enforces both at the command line; other agents follow them by reading
 this file.
 
 **Leftovers get resolved, not ignored.** A branch or worktree other than the working
-branch — and, on a `dev` project, other than an open `feature/` or `fix/` branch in its
-own folder — is unintegrated work: it is named in `STATE.md` under Mid-flight until it is
+branch — and, on a `dev` project, other than an open `<kind>/<name>` branch in its own
+folder — is unintegrated work: it is named in `STATE.md` under Mid-flight until it is
 merged or deleted, and the wrap-up verifier stays incomplete while it is not. Merged
 leftovers are clutter. Session start lists them all; "clean up the branches" walks
 through them, and nothing is deleted without the user's yes.
@@ -108,20 +108,22 @@ through them, and nothing is deleted without the user's yes.
   (`dev` → `main`) or a hotfix under `/override`.
 - **`dev` is where work happens.** Every session starts on `dev` in the project folder,
   and the project folder never leaves `dev`.
-- **Before the first change, ask: "Straight on `dev`, or a branch off `dev`?"** One thing
-  at a time goes straight on `dev`. Two or more things at once each get a branch.
-- **A branch is `feature/<task>` or `fix/<task>`, made off `dev`, in its own worktree** at
-  `.claude/worktrees/<task>`. Name it after the task in plain words (`feature/mobile-nav`).
-  Never create one without the user's yes.
-- **Every branch merges back into `dev` at wrap-up**, and then its branch and folder are
-  deleted. A branch stays open only if the user says so, and then `STATE.md` names it
-  under Mid-flight.
-- **Opening a branch, step by step.** `git worktree add .claude/worktrees/<task> -b
-  feature/<task> dev` (the user approves it), then move the session into that folder
-  (in Claude Code: EnterWorktree with that path). In the new folder, install dependencies
-  (`npm install` or the project's equivalent), copy the `.env*` files over from the
-  project folder (Git does not carry them), and run its dev server on its own port.
-  `.claude/worktrees/` must be ignored by Git (`.gitignore` or `.git/info/exclude`).
+- **Every session starts with `/initiate`.** Session start calls for it before the first
+  change. It briefs you, pins the one task the session is for, checks it against branches
+  already open, and settles "straight on `dev`, or a branch off `dev`?" One thing at a time
+  goes straight on `dev`; two or more things at once each get a branch.
+- **A branch is `<kind>/<name>`, made off `dev`, in its own worktree** at
+  `.claude/worktrees/<kind>-<name>`. The agent picks it: a kind from `feature`, `fix`,
+  `design`, `content`, `seo`, `perf`, `refactor`, `chore`, `docs`, and a name in plain
+  words (`design/pricing-page`). Never create one without the user's yes.
+- **Every branch merges back into `dev` at wrap-up**, once it builds with `dev`'s latest
+  work pulled in, and then its branch and folder are deleted. A branch stays open only if
+  the user says so, and then `STATE.md` names it under Mid-flight.
+- **Opening a branch without `/initiate`:** `git worktree add .claude/worktrees/<kind>-<name>
+  -b <kind>/<name> dev` (the user approves it), then move the session into that folder.
+  Install packages there for real (never link `node_modules`), copy the `.env*` files
+  over, and run its dev server on its own port. `.claude/worktrees/` must be ignored by
+  Git (`.gitignore` or `.git/info/exclude`).
 - **Never report how far `dev` is ahead of `main`.** Work accumulates on `dev` for weeks
   between launches — being far ahead IS the flow, not news and not a prompt to act.
   Don't volunteer the commit distance and don't suggest merging or PR-ing to `main`;
@@ -130,8 +132,8 @@ through them, and nothing is deleted without the user's yes.
   on `main` directly).
 - **Session start: sync first.** Pull `origin/dev` before working — fast-forward only,
   and only when the tree is clean. Behind with uncommitted changes, diverged, or on
-  another branch (other than this session's own `feature/` or `fix/` folder) → tell the
-  user and ask. Never switch branches, merge, or rebase on your own.
+  another branch (other than this session's own branch folder) → tell the user and ask.
+  Never switch branches, merge, or rebase on your own.
 - **Session end: leave `dev` committed and pushed.** Unpushed work is invisible to every
   other person — and to their agents' memory. The wrap-up ritual enforces this.
 - **Memory files travel with the branch.** CONTEXT/STATE/PITFALLS updates are committed
@@ -143,8 +145,8 @@ through them, and nothing is deleted without the user's yes.
 - **Commit as yourself.** Each machine sets `git config user.name` / `user.email` so
   history shows who did what — this works even on a shared GitHub account.
 - **Never, without explicit human approval:** force-push, rebase a shared branch,
-  hard-reset, or delete branches — except the merged `feature/` or `fix/` branch that
-  wrap-up tidies away after merging it back.
+  hard-reset, or delete branches — except the merged branch that wrap-up tidies away
+  after merging it back.
 
 ## Stack and tooling
 

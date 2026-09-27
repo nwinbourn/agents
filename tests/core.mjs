@@ -199,7 +199,9 @@ try {
   });
   check('git: on dev the agent asks straight-on-dev or a branch; a branch session is told it merges back', () => {
     const { client } = shared();
-    assert.match(context(hook('git-sync.mjs', client)), /Before the first change, ask the user: straight on dev, or a branch off dev\?/);
+    const onDev = context(hook('git-sync.mjs', client));
+    assert.match(onDev, /Before the first change, run the initiate skill if it is available/);
+    assert.match(onDev, /Without it, ask the user: straight on dev, or a branch off dev\?/);
     writeFileSync(join(client, '.git', 'info', 'exclude'), '.claude/worktrees/\n');
     const tree = join(client, '.claude', 'worktrees', 'mobile-nav'); git(client, 'worktree', 'add', tree, '-b', 'feature/mobile-nav', 'dev');
     const r = context(hook('git-sync.mjs', tree));

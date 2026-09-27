@@ -69,7 +69,7 @@ projects also get notices when required memory is missing. Other projects stay s
 
 Memory files also turn on the branch guard: Claude cannot create stray branches or
 worktrees in the project. With `origin/dev`, Claude asks at the start whether to work
-straight on `dev` or on a branch. A branch is `feature/<task>` or `fix/<task>`, made off
+straight on `dev` or on a branch. A branch is `<kind>/<name>` (`design/pricing-page`), made off
 `dev` in its own folder, and opening one asks you first; wrap-up merges it back into
 `dev`. Commits stay on `dev` or that branch, and anything that touches `main` (switching
 to it, merging into it, pushing it) asks you first, because that is a release. Creating

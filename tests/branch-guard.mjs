@@ -116,6 +116,18 @@ try {
     assert.match(reason(sh(dir, 'git branch feature/mobile-nav main')), /must be made off 'dev'/);
     assert.match(reason(sh(dir, 'git worktree add ../mobile-nav -b feature/mobile-nav dev')), /live in \.claude\/worktrees/);
   });
+  await test('shared workflow: every listed kind opens a branch; an unlisted kind or a random name does not', () => {
+    const dir = shared(); ignoreWorktrees(dir);
+    for (const kind of ['feature', 'fix', 'design', 'content', 'seo', 'perf', 'refactor', 'chore', 'docs']) {
+      assert.equal(decision(sh(dir, `git worktree add .claude/worktrees/${kind}-pricing-page -b ${kind}/pricing-page dev`)), 'ask', kind);
+      assert.equal(decision(sh(dir, `git branch ${kind}/pricing-page`)), 'ask', kind);
+    }
+    for (const name of ['layout/hero', 'feat/hero', 'bugfix/hero', 'claude/work-page-867d9f', 'design/Hero', 'design/hero_banner', 'design/hero/extra']) {
+      assert.equal(decision(sh(dir, `git branch ${name}`)), 'deny', name);
+    }
+    assert.match(reason(sh(dir, 'git branch layout/hero')), /kind is one of feature, fix, design, content, seo, perf, refactor, chore, docs/);
+    assert.match(reason(sh(dir, 'git switch -c design/pricing-page')), /git worktree add \.claude\/worktrees\/design-pricing-page -b design\/pricing-page dev/);
+  });
   await test('shared workflow: a branch folder Git would not ignore is refused until it is excluded', () => {
     const dir = shared(); const c = 'git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev';
     assert.equal(decision(sh(dir, c)), 'deny');
@@ -149,7 +161,7 @@ try {
     const dir = shared();
     assert.equal(hook(dir, 'EnterWorktree', { path: join(dir, '.claude', 'worktrees', 'mobile-nav') }), null);
     assert.equal(decision(hook(dir, 'EnterWorktree', { name: 'mobile-nav' })), 'deny');
-    assert.match(reason(hook(dir, 'EnterWorktree', {})), /feature\/<task> or fix\/<task> made off 'dev'/);
+    assert.match(reason(hook(dir, 'EnterWorktree', {})), /<kind>\/<name> made off 'dev'/);
     assert.match(reason(hook(dir, 'Agent', { isolation: 'worktree', prompt: 'x' })), /without isolation/);
   });
   await test('shared workflow: a fresh clone on main may create local dev from origin', () => {

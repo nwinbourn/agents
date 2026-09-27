@@ -1,8 +1,9 @@
 // Leftover branches and worktrees, read-only. A project keeps one working branch; on a
-// dev project, feature/ and fix/ branches checked out in their own folders are open
-// parallel work that merges back at its own wrap-up. Everything else is either
-// unrecorded work (commits not on the working branch, not named in STATE.md) or clutter
-// (merged, safe to delete). Nothing here fetches, switches or deletes.
+// dev project, <kind>/<name> task branches checked out in their own folders are open
+// parallel work that merges back at its own wrap-up, reported with the note they were
+// opened with and the files they have touched (what a clash check compares). Everything
+// else is either unrecorded work (commits not on the working branch, not named in
+// STATE.md) or clutter (merged, safe to delete). Nothing here fetches, switches or deletes.
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { runGit, findMemoryFile } from './project-inspection.mjs';
@@ -10,6 +11,7 @@ import { isTaskBranch } from './branch-policy.mjs';
 
 const TRUNKS = ['main', 'master'];
 const SCAN_LIMIT = 40; // per list; beyond this the count is reported, not inspected
+const FILE_LIMIT = 50; // touched files listed per open branch
 
 export function trunkBranch(root) {
   const has = name => runGit(root, ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).ok;
@@ -71,13 +73,40 @@ export function branchInventory(root, workflow) {
         ahead: count, merged: count === 0, named: named(branch, rel, path), task: shared && isTaskBranch(branch) });
     }
   }
+  // What each branch was opened for: git's branch description, written when it was opened.
+  const notes = new Map();
+  const config = runGit(root, ['config', '-z', '--get-regexp', '^branch\\..+\\.description$']);
+  if (config.ok) {
+    for (const record of config.output.split('\0')) {
+      const cut = record.indexOf('\n');
+      if (cut > 0) notes.set(record.slice('branch.'.length, cut - '.description'.length), record.slice(cut + 1).trim());
+    }
+  }
+  // Files an open branch has touched, committed or still pending in its folder.
+  const touched = (branch, folder) => {
+    const files = new Set();
+    const committed = workingExists ? runGit(root, ['diff', '--name-only', `${working}...${branch}`]) : null;
+    if (committed?.ok) for (const file of committed.output.split('\n')) if (file) files.add(file);
+    const pending = existsSync(folder) ? runGit(folder, ['status', '--porcelain=v1', '-z', '--untracked-files=all']) : null;
+    if (pending?.ok) {
+      const entries = pending.output.split('\0');
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].length < 4) continue;
+        files.add(entries[i].slice(3));
+        if (/^[RC]/.test(entries[i])) i++; // a rename or copy is followed by its old path
+      }
+    }
+    return [...files].sort().slice(0, FILE_LIMIT);
+  };
   let skipped = 0;
   const local = [];
   for (const ref of refs('refs/heads')) {
     if (keep.has(ref.name)) continue;
     if (local.length >= SCAN_LIMIT) { skipped++; continue; }
     const folder = folders.get(ref.name);
-    local.push({ ...describe(ref), task: shared && isTaskBranch(ref.name), folder: folder?.path ?? null, folderExists: folder?.exists ?? null });
+    const task = shared && isTaskBranch(ref.name);
+    local.push({ ...describe(ref), task, folder: folder?.path ?? null, folderExists: folder?.exists ?? null,
+      note: notes.get(ref.name) ?? null, ...(task && folder ? { files: touched(ref.name, folder.path) } : {}) });
   }
   const remote = [];
   for (const ref of refs('refs/remotes/origin')) {
@@ -89,7 +118,7 @@ export function branchInventory(root, workflow) {
   return { working, trunk, current, local, worktrees, remote, skipped };
 }
 
-/** Open parallel work: a dev project's feature/ or fix/ branch checked out in its own folder. */
+/** Open parallel work: a dev project's <kind>/<name> branch checked out in its own folder. */
 export const isOpenBranch = branch => Boolean(branch.task && branch.folder);
 
 /** The one-line session-start report; empty when only the working branch exists. */
@@ -105,7 +134,8 @@ export function describeInventory(inv) {
   const parts = [];
   if (open.length) {
     parts.push(`${plural(open.length, 'open branch')} (parallel work in its own folder; each merges back into ${inv.working} at its own wrap-up): ` +
-      some(open, b => `${b.name} (${b.current ? 'this session, ' : ''}${b.folderExists === false ? 'its folder is missing on disk, ' : ''}` +
+      some(open, b => `${b.name}${b.note ? ` — "${b.note.length > 80 ? b.note.slice(0, 79) + '…' : b.note}"` : ''} ` +
+        `(${b.current ? 'this session, ' : ''}${b.folderExists === false ? 'its folder is missing on disk, ' : ''}` +
         `${b.ahead ? `${plural(b.ahead, 'commit')} not yet on ${inv.working}` : `nothing beyond ${inv.working} yet`}, last commit ${b.lastCommit})`));
   }
   if (local.length) {
@@ -122,5 +152,5 @@ export function describeInventory(inv) {
   if (inv.skipped) parts.push(`${inv.skipped} more not inspected`);
   if (!parts.length) return '';
   if (!local.length && !worktrees.length && !inv.remote.length && !inv.skipped) return `[branches] ${parts.join('. ')}. Nothing else to clean up.`;
-  return `[branches] ${parts.join('. ')}. This project keeps one working branch (${inv.working})${open.length ? ' plus open feature/ and fix/ branches' : ''}. Say "clean up the branches" to resolve ${open.length ? 'the rest' : 'these'}; nothing is deleted without the user's yes.`;
+  return `[branches] ${parts.join('. ')}. This project keeps one working branch (${inv.working})${open.length ? ' plus open branches' : ''}. Say "clean up the branches" to resolve ${open.length ? 'the rest' : 'these'}; nothing is deleted without the user's yes.`;
 }

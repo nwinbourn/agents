@@ -140,14 +140,19 @@ try {
   test('startup shows open feature/ branches as parallel work, and a branch session skips the dev handoff check',()=>{
     const {client}=shared();writeFileSync(join(client,'.git','info','exclude'),'.claude/worktrees/\n');
     const tree=join(client,'.claude','worktrees','mobile-nav');git(client,'worktree','add',tree,'-b','feature/mobile-nav','dev');
-    write(tree,'app.txt','branch work');save(tree);
+    git(client,'config','branch.feature/mobile-nav.description','Rebuild the mobile nav as a slide-out menu');
+    write(tree,'app.txt','branch work');save(tree);write(tree,'nav.txt','not committed yet');
     let output=load(client);
-    assert.match(output,/\[branches\] 1 open branch \(parallel work in its own folder; each merges back into dev at its own wrap-up\): feature\/mobile-nav \(1 commit not yet on dev, last commit \d{4}-\d{2}-\d{2}\)\. Nothing else to clean up\./);
+    assert.match(output,/\[branches\] 1 open branch \(parallel work in its own folder; each merges back into dev at its own wrap-up\): feature\/mobile-nav — "Rebuild the mobile nav as a slide-out menu" \(1 commit not yet on dev, last commit \d{4}-\d{2}-\d{2}\)\. Nothing else to clean up\./);
+    // The inventory command gives a clash check the note and every file the branch touched, committed or pending.
+    const inv=JSON.parse(execFileSync(process.execPath,[join(HOOKS,'branch-inventory.mjs'),'--project',client],{env,encoding:'utf8'}));
+    const open=inv.local.find(b=>b.name==='feature/mobile-nav');
+    assert.equal(open.note,'Rebuild the mobile nav as a slide-out menu');assert.deepEqual(open.files,['app.txt','nav.txt']);
     assert.match(output,/\[handoff\] The previous handoff passes/);
     output=load(tree);
     assert.match(output,/On branch 'feature\/mobile-nav', in its own folder, made off 'dev'/);
     assert(!output.includes('[handoff]'));
-    assert.match(output,/feature\/mobile-nav \(this session, 1 commit not yet on dev/);
+    assert.match(output,/feature\/mobile-nav — "Rebuild the mobile nav as a slide-out menu" \(this session, 1 commit not yet on dev/);
   });
   console.log(`${passed} startup memory checks passed`);
 } finally {

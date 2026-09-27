@@ -10,17 +10,22 @@ const BRANCH = 'dev';
 const DEV_REFS = new Set([BRANCH, `origin/${BRANCH}`, `refs/heads/${BRANCH}`, `refs/remotes/origin/${BRANCH}`]);
 export const WORKTREE_HOME = '.claude/worktrees';
 
+/** The kinds a task branch may be: the usual conventional types plus two for websites. */
+export const TASK_KINDS = ['feature', 'fix', 'design', 'content', 'seo', 'perf', 'refactor', 'chore', 'docs'];
+const TASK_BRANCH = new RegExp(`^(?:${TASK_KINDS.join('|')})/[a-z0-9]+(?:-[a-z0-9]+)*$`);
+
 /**
- * A task branch on a dev project: feature/<task> or fix/<task>, lowercase words joined
- * by dashes. It is made off dev, lives in its own worktree and merges back at wrap-up.
+ * A task branch on a dev project: <kind>/<name>, a kind from TASK_KINDS and a name of
+ * lowercase words joined by dashes (design/pricing-page). It is made off dev, lives in
+ * its own worktree and merges back at wrap-up.
  * @param {unknown} name
  */
 export function isTaskBranch(name) {
-  return typeof name === 'string' && name.length <= 64 && /^(?:feature|fix)\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name);
+  return typeof name === 'string' && name.length <= 64 && TASK_BRANCH.test(name);
 }
 
 const openCommand = (target, create = true) =>
-  `git worktree add ${WORKTREE_HOME}/${target.slice(target.indexOf('/') + 1)} ${create ? `-b ${target} ${BRANCH}` : target}`;
+  `git worktree add ${WORKTREE_HOME}/${target.replace('/', '-')} ${create ? `-b ${target} ${BRANCH}` : target}`;
 
 /**
  * Split a bash or PowerShell command string into simple commands, each an array of
@@ -321,8 +326,8 @@ export function decide(op, state) {
   const allow = (current = state.current) => ({ decision: 'allow', reason: '', current });
   const ask = (reason, current = state.current) => ({ decision: 'ask', reason, current });
   const deny = reason => ({ decision: 'deny', reason, current: state.current });
-  const example = `git worktree add ${WORKTREE_HOME}/<task> -b feature/<task> ${BRANCH}`;
-  const misfit = target => soften(state, 'taskBranches', deny(`branch-guard: '${target}' is not a branch this project uses. Work goes straight on '${BRANCH}', or, when the user chose a branch, on feature/<task> or fix/<task> made off ${BRANCH} in its own folder: \`${example}\`. ${rules}`), target);
+  const example = `git worktree add ${WORKTREE_HOME}/<kind>-<name> -b <kind>/<name> ${BRANCH}`;
+  const misfit = target => soften(state, 'taskBranches', deny(`branch-guard: '${target}' is not a branch this project uses. Work goes straight on '${BRANCH}', or, when the user chose a branch, on <kind>/<name> made off ${BRANCH} in its own folder — kind is one of ${TASK_KINDS.join(', ')}; name is plain words with dashes (design/pricing-page): \`${example}\`. ${rules}`), target);
   // A new task branch (not checked out here): off dev, with the user's approval.
   const openTaskBranch = (target, start) => {
     const from = start ?? state.current; // git branches from HEAD when no start point is given
@@ -334,9 +339,9 @@ export function decide(op, state) {
     case 'worktree': {
       if (!shared) return soften(state, 'worktrees', deny(`branch-guard: worktrees are not used in this project; each one becomes a stray branch. Work in this checkout on '${state.current ?? state.trunk}'. ${rules}`));
       const refuse = why => soften(state, 'worktrees', deny(`branch-guard: ${why} ${rules}`));
-      if (op.detach || op.orphan) return refuse(`a worktree here holds one feature/ or fix/ branch made off '${BRANCH}'; detached and orphan worktrees are not used. Open one with \`${example}\`.`);
+      if (op.detach || op.orphan) return refuse(`a worktree here holds one <kind>/<name> branch made off '${BRANCH}'; detached and orphan worktrees are not used. Open one with \`${example}\`.`);
       const place = op.path ? state.probes.worktreePlace(op.path) : 'outside';
-      if (place === 'outside') return refuse(`branch folders live in ${WORKTREE_HOME}/<task>. Open one with \`${example}\`.`);
+      if (place === 'outside') return refuse(`branch folders live in ${WORKTREE_HOME}/<kind>-<name>. Open one with \`${example}\`.`);
       if (place === 'not-ignored') return deny(`branch-guard: ${WORKTREE_HOME}/ is not ignored by Git here, so a branch folder would show up as untracked work on '${BRANCH}'. Add the line \`${WORKTREE_HOME}/\` to .git/info/exclude, then retry. ${rules}`);
       if (op.create) {
         const target = op.create.replace(/^refs\/heads\//, '');
@@ -344,7 +349,7 @@ export function decide(op, state) {
       }
       // Without -b: reopen an existing task branch, or git would invent a branch named after the folder.
       if (isTaskBranch(op.start) && state.probes.branchExists(op.start)) return allow();
-      return refuse(`\`git worktree add\` here takes -b with a feature/<task> or fix/<task> name made off '${BRANCH}' (\`${example}\`), or reopens an existing one of those.`);
+      return refuse(`\`git worktree add\` here takes -b with a <kind>/<name> branch made off '${BRANCH}' (\`${example}\`), or reopens an existing one of those.`);
     }
     case 'create': {
       const target = String(op.target ?? '').replace(/^refs\/heads\//, '');
@@ -377,7 +382,7 @@ export function decide(op, state) {
       if (cur === BRANCH || (cur && cur.startsWith('wip/')) || isTaskBranch(cur)) return allow();
       const where = cur ? `'${cur}'` : 'a detached HEAD';
       if (state.mergeInProgress) return ask(`branch-guard: a merge is in progress on ${where}; finishing it commits there. Approve only as part of a release the user asked for. ${rules}`);
-      return deny(`branch-guard: commits go on '${BRANCH}' (or on a feature/ or fix/ branch in its own folder), never on ${where}. Switch back to ${BRANCH} and commit there. ${rules}`);
+      return deny(`branch-guard: commits go on '${BRANCH}' (or on a <kind>/<name> branch in its own folder), never on ${where}. Switch back to ${BRANCH} and commit there. ${rules}`);
     }
     case 'merge':
       if (!shared || state.current === BRANCH) return allow();

@@ -44,7 +44,7 @@ hook preserves local work and never switches branches automatically.
 While the agent works, a branch guard enforces the flow at the command line. In any
 project with memory files it refuses stray branches and worktrees, the usual source of
 a repo full of half-merged work. Where `origin/dev` exists, parallel work gets a
-`feature/<task>` or `fix/<task>` branch made off `dev` in its own folder (opening one is
+`<kind>/<name>` branch (`design/pricing-page`) made off `dev` in its own folder (opening one is
 a permission prompt), and wrap-up merges it back into `dev`. Commits stay on `dev` or
 that branch, and anything that touches `main` (switching to it, merging into it, pushing
 it) becomes a permission prompt, because that is a release. Refusals go to the model with

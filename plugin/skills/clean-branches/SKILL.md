@@ -8,8 +8,8 @@ Bring the repository back to one working branch (`dev` on a shared project, `mai
 otherwise) without losing anything. Every deletion is a question first. The branch guard
 prompts for the risky ones anyway; this skill asks before that, in plain words.
 
-**Open task branches are not leftovers.** On a `dev` project, a `feature/…` or `fix/…`
-branch checked out in its own folder under `.claude/worktrees/` is another session's
+**Open task branches are not leftovers.** On a `dev` project, a `<kind>/<name>` branch
+(`design/pricing-page`) checked out in its own folder under `.claude/worktrees/` is another session's
 parallel work; that session's wrap-up merges it back. The inventory lists them apart as
 open. Leave them and their folders alone unless the user says that work is abandoned.
 

@@ -1,7 +1,7 @@
 # Branch guard
 
 One hook keeps a project on its working branch, and on a `dev` project lets parallel work
-happen on short-lived `feature/` and `fix/` branches without turning into a pile of stray
+happen on short-lived task branches without turning into a pile of stray
 ones. It runs before every command the agent sends through the Bash or PowerShell tool,
 and before Claude Code's own worktree features. It stays silent in projects that have not
 adopted the memory protocol, and silent under the rules.
@@ -17,18 +17,20 @@ adopted the memory protocol, and silent under the rules.
 
 ## Task branches (shared workflow)
 
-A task branch is `feature/<task>` or `fix/<task>` — lowercase words joined by dashes, like
-`feature/mobile-nav`. It is made off `dev`, lives in its own folder at
-`.claude/worktrees/<task>` so the project folder never leaves `dev`, and merges back into
+A task branch is `<kind>/<name>`. The kind is one of `feature` (new things), `fix` (broken
+things), `design` (how it looks), `content` (words and images), `seo` (getting found),
+`perf` (speed), `refactor` (tidying code), `chore` (upkeep) or `docs` (notes); the name is
+lowercase words joined by dashes, like `design/pricing-page`. It is made off `dev`, lives in
+its own folder at `.claude/worktrees/<kind>-<name>` so the project folder never leaves `dev`, and merges back into
 `dev` at wrap-up. Opening one is a single command, and the user approves it:
 
 ```sh
-git worktree add .claude/worktrees/mobile-nav -b feature/mobile-nav dev
+git worktree add .claude/worktrees/design-pricing-page -b design/pricing-page dev
 ```
 
 The session then moves in with `EnterWorktree` and that path. `.claude/worktrees/` must be
 ignored by Git; if it is not, the guard says to add it to `.git/info/exclude` first, so a
-branch folder never shows up as untracked work on `dev`. Any other name (`claude/…-867d9f`),
+branch folder never shows up as untracked work on `dev`. Any other name (`claude/…-867d9f`, an unlisted kind like `layout/hero`),
 a start point other than `dev`, a folder elsewhere, or a branch created in place (which
 would move a folder another session may be using) is refused with the command to use
 instead.
@@ -37,12 +39,12 @@ instead.
 
 | Action | Local workflow | Shared workflow |
 |---|---|---|
-| Open a task branch off `dev` in its folder (`git worktree add .claude/worktrees/<task> -b feature/<task> dev`, or `git branch feature/<task>` on `dev`) | Refused | Asks |
+| Open a task branch off `dev` in its folder (`git worktree add .claude/worktrees/<kind>-<name> -b <kind>/<name> dev`, or `git branch <kind>/<name>` on `dev`) | Refused | Asks |
 | Create a task branch in place (`checkout -b`, `switch -c`, `stash branch`), or off anything but `dev` | Refused | Refused, with the command to use instead |
 | Create any other branch (`checkout -b`, `switch -c`, `branch <name>`, `stash branch`, branch copy) | Refused | Refused; `wip/…` asks (the conflict-parking exception in AGENTS.md) |
 | Create `dev` | Asks | Allowed (it is the working branch) |
 | Check out a branch that only exists on the remote | Refused (git would create a local branch) | Refused, except `dev` |
-| Reopen an existing task branch in its folder (`git worktree add .claude/worktrees/<task> feature/<task>`) | Refused | Allowed |
+| Reopen an existing task branch in its folder (`git worktree add .claude/worktrees/<kind>-<name> <kind>/<name>`) | Refused | Allowed |
 | Any other `git worktree add`, `EnterWorktree` without a path, an agent with worktree isolation | Refused | Refused |
 | `EnterWorktree` with the path of an existing folder | Allowed | Allowed |
 | Switch to a task branch | — | Refused; it lives in its own folder |
