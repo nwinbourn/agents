@@ -157,6 +157,11 @@ and the loop does not depend on them. They are off, or inert, until you use them
   itself. Nothing goes silent.
 - `/pause` and `/continue`: interruption handling.
 
-## License
+## 🛡️ License & Commercial Notice
 
-MIT
+This project is strictly open-source under the [MIT License](LICENSE) and is free to use,
+modify, and distribute.
+
+If you found this tool valuable and need advanced AI integrations, custom web applications,
+or digital strategy for your business, check out my studio at
+[Unhidden Digital](https://unhiddendigital.com).
